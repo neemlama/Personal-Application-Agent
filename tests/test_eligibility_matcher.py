@@ -25,14 +25,29 @@ def test_empty_profile_excludes_nothing_it_cant_justify():
     }
 
 
-def test_school_age_child_matches_school_programme_only():
-    # Normal case: a 12-year-old should not be a plausible candidate for a
-    # higher-ed-only or elderly-only program.
+def test_school_age_child_is_excluded_from_age_bounded_programs_only():
+    # Normal case: a 12-year-old should be excluded from the elderly
+    # allowance (hard age bound), but NOT from UGC (no age bound in the
+    # catalog at all — its real gate is "enrolled in higher ed", which is
+    # an education_level judgment call left to the agent, not this filter;
+    # see the _EXCLUSION_CHECKS comment for why level isn't hard-filtered).
     profile = {"age": 12, "education_level": "school"}
     matched = _matched_ids(eligibility_matcher(profile))
     assert "school-scholarship-programme" in matched
-    assert "ugc-disadvantaged-scholarship" not in matched  # level mismatch
+    assert "ugc-disadvantaged-scholarship" in matched  # no hard age/level gate; agent must reason about this
     assert "samajik-suraksha-bhatta" not in matched  # min_age 70, no mitigating group
+
+
+def test_recent_school_leaver_is_a_candidate_for_the_next_level_up():
+    # Regression test for a real bug caught in live agent testing: a
+    # 16-year-old who just finished SEE has education_level="school", but
+    # is exactly the target applicant for CTEVT's "technical" program (you
+    # apply to technical education FROM school). A naive
+    # program.level == profile.education_level check wrongly excluded this
+    # applicant. There must be no such hard exclusion.
+    profile = {"age": 16, "education_level": "school", "marginalized_groups": ["Dalit"]}
+    matched = _matched_ids(eligibility_matcher(profile))
+    assert "ctevt-special-scholarship" in matched
 
 
 def test_elderly_dalit_gets_reduced_age_threshold_as_candidate():

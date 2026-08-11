@@ -27,12 +27,6 @@ def _citizenship_excludes(profile: dict[str, Any], program: dict[str, Any]) -> b
     return bool(required and given and required != given)
 
 
-def _education_level_excludes(profile: dict[str, Any], program: dict[str, Any]) -> bool:
-    level = program.get("level", "any")
-    given = profile.get("education_level")
-    return bool(level != "any" and given and level != given)
-
-
 def _age_excludes(profile: dict[str, Any], program: dict[str, Any]) -> bool:
     age = profile.get("age")
     if age is None:
@@ -71,9 +65,17 @@ def _geography_excludes(profile: dict[str, Any], program: dict[str, Any]) -> boo
     return local_level not in scope
 
 
+# Deliberately no education-level exclusion check. An earlier version
+# hard-excluded on program["level"] != profile["education_level"], which
+# broke the single most common real case: a 16-year-old who just finished
+# SEE has education_level="school" but is exactly the target applicant for
+# CTEVT's "technical" program (you apply to technical education FROM
+# school). "Current attainment" and "level you're eligible to enter next"
+# are not the same axis, and encoding that progression correctly is a
+# judgment call, not a lookup — left to the agent's reasoning over `level`
+# and `education_prerequisite`, same as the age-mitigation judgment calls.
 _EXCLUSION_CHECKS = (
     ("citizenship", _citizenship_excludes),
-    ("education_level", _education_level_excludes),
     ("age", _age_excludes),
     ("family_income", _income_excludes),
     ("geographic_scope", _geography_excludes),
@@ -87,10 +89,12 @@ def eligibility_matcher(profile: dict[str, Any]) -> list[dict[str, Any]]:
     Args:
         profile: Applicant details. Recognized keys (all optional — missing
             fields are never treated as disqualifying, only as "unknown"):
-            citizenship (str, e.g. "NP"), age (int), education_level
-            (str: "school" | "technical" | "higher_ed"), family_income_npr
+            citizenship (str, e.g. "NP"), age (int), family_income_npr
             (int), local_level (str), marginalized_groups (list[str]),
-            single_woman_or_widow (bool).
+            single_woman_or_widow (bool). education_level, if you have it,
+            is NOT filtered here (see comment on _EXCLUSION_CHECKS below) —
+            weigh it yourself against each returned program's `level` and
+            `education_prerequisite`.
 
     Returns:
         A list of {program, matched: bool, exclusion_reasons: list[str]}
