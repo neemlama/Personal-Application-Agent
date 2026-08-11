@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Sahayogi — Personal Application Agent",
+  "name": "FormBuddy — Personal Application Agent",
   "version": "1.0.0",
   "description": "Reads the form on your current tab, drafts a fill plan from your local profile, and only fills after you approve. You always click Submit yourself.",
   "permissions": ["scripting", "storage", "sidePanel", "tabs"],
   "host_permissions": ["<all_urls>"],
   "action": {
-    "default_title": "Open Sahayogi Agent"
+    "default_title": "Open FormBuddy Agent"
   },
   "side_panel": {
     "default_path": "sidepanel.html"

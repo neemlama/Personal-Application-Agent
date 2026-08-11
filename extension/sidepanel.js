@@ -1,5 +1,5 @@
-// Sahayogi side panel. Talks to: (1) background.js via chrome.runtime
-// messages for reading/filling the active tab, (2) the Sahayogi backend
+// FormBuddy side panel. Talks to: (1) background.js via chrome.runtime
+// messages for reading/filling the active tab, (2) the FormBuddy backend
 // via fetch() for all agent reasoning (CORS-enabled for this, see
 // api/main.py).
 
@@ -9,16 +9,16 @@ const $ = (id) => document.getElementById(id);
 
 // --- session id, persisted per-install via chrome.storage.local ---
 async function getSessionId() {
-  const { sahayogi_session_id } = await chrome.storage.local.get("sahayogi_session_id");
-  if (sahayogi_session_id) return sahayogi_session_id;
+  const { formbuddy_session_id } = await chrome.storage.local.get("formbuddy_session_id");
+  if (formbuddy_session_id) return formbuddy_session_id;
   const id = "ext-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
-  await chrome.storage.local.set({ sahayogi_session_id: id });
+  await chrome.storage.local.set({ formbuddy_session_id: id });
   return id;
 }
 
 async function resetSessionId() {
   const id = "ext-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
-  await chrome.storage.local.set({ sahayogi_session_id: id });
+  await chrome.storage.local.set({ formbuddy_session_id: id });
   return id;
 }
 
@@ -27,12 +27,12 @@ let lastKnownFields = null; // the approved plan's fields, cached for the fill s
 
 // --- profile vault ---
 async function loadProfile() {
-  const { sahayogi_profile } = await chrome.storage.local.get("sahayogi_profile");
-  $("profile-text").value = sahayogi_profile || "";
+  const { formbuddy_profile } = await chrome.storage.local.get("formbuddy_profile");
+  $("profile-text").value = formbuddy_profile || "";
 }
 
 $("profile-save").addEventListener("click", async () => {
-  await chrome.storage.local.set({ sahayogi_profile: $("profile-text").value });
+  await chrome.storage.local.set({ formbuddy_profile: $("profile-text").value });
   $("profile-saved-note").hidden = false;
   setTimeout(() => ($("profile-saved-note").hidden = true), 1500);
 });
@@ -101,9 +101,9 @@ $("analyze-btn").addEventListener("click", async () => {
   const thinking = addMessage("Reading the page...", "thinking");
   try {
     const page = await extractPageFromTab();
-    thinking.textContent = "Sahayogi is analyzing the form...";
+    thinking.textContent = "FormBuddy is analyzing the form...";
 
-    const profile = (await chrome.storage.local.get("sahayogi_profile")).sahayogi_profile || "";
+    const profile = (await chrome.storage.local.get("formbuddy_profile")).formbuddy_profile || "";
     const message = profile
       ? `Please analyze the form on this page for me. Here's what you know about me:\n${profile}`
       : "Please analyze the form on this page for me.";

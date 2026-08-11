@@ -1,7 +1,7 @@
-// Sahayogi frontend — talks only to the same-origin FastAPI backend
+// FormBuddy frontend — talks only to the same-origin FastAPI backend
 // (api/main.py). No framework, no build step: deliberately simple.
 
-const SESSION_KEY = "sahayogi_session_id";
+const SESSION_KEY = "formbuddy_session_id";
 
 function getSessionId() {
   let id = localStorage.getItem(SESSION_KEY);
@@ -39,7 +39,7 @@ async function sendChat(message) {
   addMessage(message, "user");
   inputEl.value = "";
   formEl.querySelector("button").disabled = true;
-  const thinking = addMessage("Sahayogi is thinking...", "thinking");
+  const thinking = addMessage("FormBuddy is thinking...", "thinking");
 
   try {
     const res = await fetch("/api/chat", {
@@ -52,7 +52,7 @@ async function sendChat(message) {
     addMessage(data.reply, "agent");
   } catch (err) {
     thinking.remove();
-    addMessage("Something went wrong reaching Sahayogi: " + err, "agent");
+    addMessage("Something went wrong reaching FormBuddy: " + err, "agent");
   } finally {
     formEl.querySelector("button").disabled = false;
     refreshSession();
@@ -131,7 +131,7 @@ async function decide(decision) {
   decisionResult.className = "decision-result pending";
   decisionResult.textContent =
     decision === "approved"
-      ? "⏳ Approved — Sahayogi is now filling out the real application via a live browser session. This can take 1–2 minutes..."
+      ? "⏳ Approved — FormBuddy is now filling out the real application via a live browser session. This can take 1–2 minutes..."
       : "⏳ Recording rejection...";
 
   try {
@@ -204,7 +204,7 @@ document.getElementById("new-session-btn").addEventListener("click", () => {
 
 // Initial load: greet + sync any existing session state (e.g. after a page refresh).
 addMessage(
-  "Namaste! Give me a link to a form you need filled out (an RSVP, a signup, an application) and tell me about yourself, and I'll read the actual form, draft what I'd submit, and wait for your approval before doing anything.",
+  "Hi! Give me a link to a form you need filled out (an RSVP, a signup, an application) and tell me about yourself, and I'll read the actual form, draft what I'd submit, and wait for your approval before doing anything.",
   "agent"
 );
 refreshSession();

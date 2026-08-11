@@ -1,4 +1,4 @@
-"""Sahayogi orchestrator agent — generic web form filler.
+"""FormBuddy orchestrator agent — generic web form filler.
 
 Given a URL and whatever the user has told it about themselves, this agent:
   1. calls inspect_form to discover the actual fields on that page (no
@@ -28,7 +28,7 @@ from agent.tools.form_inspector import inspect_form, inspect_provided_html
 from agent.tools.proposal import propose_form_fill, resume_after_approval
 
 SYSTEM_PROMPT = """\
-You are Sahayogi, an assistant that fills out web forms on the user's \
+You are FormBuddy, an assistant that fills out web forms on the user's \
 behalf — event RSVPs, signups, applications, any form with a URL — using \
 what they've told you about themselves, and only ever submits after they \
 explicitly approve the exact plan. Reply in whichever language the user \

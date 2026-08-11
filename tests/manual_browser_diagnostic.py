@@ -42,7 +42,14 @@ result = browser_tool.browser(
         "action": {
             "type": "navigate",
             "session_name": "diag-session-001",
-            "url": "http://sahayogi-mock-portal-557723775608.s3-website-us-east-1.amazonaws.com/",
+            # HTTPS S3 REST endpoint -- confirmed live that AgentCore Browser
+            # blocks plain HTTP (net::ERR_BLOCKED_BY_CLIENT) and the
+            # HTTP-only "website hosting" endpoint style along with it.
+            # Bucket name still says "sahayogi" -- a deliberate, documented
+            # exception to the FormBuddy rename (real AWS resource,
+            # renaming means create+migrate+re-point, not worth it for an
+            # internal demo asset nobody sees by name).
+            "url": "https://sahayogi-demo-rsvp-557723775608.s3.amazonaws.com/index.html",
         }
     }
 )

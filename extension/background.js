@@ -1,4 +1,4 @@
-// Sahayogi extension service worker. Two jobs:
+// FormBuddy extension service worker. Two jobs:
 //   1. Make the toolbar icon open the side panel (standard MV3 pattern).
 //   2. Relay EXTRACT_PAGE / FILL_FIELDS requests from the side panel into
 //      the active tab via chrome.scripting.executeScript.

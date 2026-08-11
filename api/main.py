@@ -1,4 +1,4 @@
-"""FastAPI backend for Sahayogi.
+"""FastAPI backend for FormBuddy.
 
 Thin HTTP wrapper around the existing agent/tools code — no agent logic is
 duplicated here, every endpoint just calls the same functions the CLI uses
@@ -41,7 +41,7 @@ from agent.tools.audit_log import read_local_entries
 from agent.tools.proposal import record_extension_fill_result, resume_after_approval
 from agent.tools.session_store import get_session
 
-app = FastAPI(title="Sahayogi API")
+app = FastAPI(title="FormBuddy API")
 
 # The web frontend is served from this same origin (no CORS needed there),
 # but the Chrome extension's side panel runs on a chrome-extension://

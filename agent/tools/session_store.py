@@ -40,7 +40,7 @@ def _use_dynamodb() -> bool:
 def _table():
     import boto3  # local import: keeps boto3 off the hot path for local/test runs
 
-    table_name = os.environ.get("SESSION_TABLE_NAME", "sahayogi-sessions")
+    table_name = os.environ.get("SESSION_TABLE_NAME", "formbuddy-sessions")
     return boto3.resource("dynamodb").Table(table_name)
 
 
