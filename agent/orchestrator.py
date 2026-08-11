@@ -67,6 +67,13 @@ def run(session_id: str, message: str) -> str:
 if __name__ == "__main__":
     import sys
 
+    # Windows consoles default to a legacy codepage (e.g. cp1252) that can't
+    # encode emoji/Devanagari the model may output (this agent replies in
+    # English or Nepali, and Strands streams tokens straight to stdout).
+    # Force UTF-8 so output doesn't crash mid-response.
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     default_message = (
         "I am 16 years old, my family's local level is in Kalikot district, "
         "and I just passed my SEE exam. My family is Dalit and low income. "

@@ -8,10 +8,17 @@ Requires:
     https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html
 """
 
+import sys
+
 from strands import Agent
 
 
 def main() -> None:
+    # See agent/orchestrator.py for why: Windows consoles can't always
+    # encode what the model streams to stdout.
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     agent = Agent(
         system_prompt=(
             "You are a smoke-test assistant for the Sahayogi project. "
