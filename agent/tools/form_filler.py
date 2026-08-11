@@ -1,205 +1,24 @@
-"""form_filler — drives AgentCore Browser through a program's online
-application portal to complete an approved submission.
+"""fill_and_submit_form — drives AgentCore Browser to fill and submit an
+arbitrary web form, given a URL and a set of field values already agreed
+during the propose step.
 
 Only ever called from resume_after_approval(), after a human has already
 approved the proposal — never autonomously, never before approval, and
-never called by the orchestrator's main agent on itself (it has no tool
-that does this; see orchestrator.py's system prompt).
+never called by the orchestrator's main agent on itself.
 
 Runs its own isolated Strands Agent with the AgentCore Browser tool
-registered, same isolation pattern as document_parser's vision extractor —
-its raw tool-call chatter is not something a user should see mid-approval.
+registered, same isolation pattern as document_parser/form_inspector.
 
-Two deliberate safety properties, both because this is the one tool in the
-whole system that takes an irreversible external action:
-  1. Pre-flight field check (pure Python, no browser, no model call) refuses
-     to even start if the profile is missing fields the form requires,
-     rather than letting the browser agent improvise/fabricate a value for
-     a blank citizenship number or date of birth.
-  2. PORTAL_MAP only knows how to fill programs it has an explicit,
-     human-curated field mapping for — same "cannot guess a form we
-     haven't verified" principle as the program catalog itself.
+Safety property (the one this module keeps end to end): never invents a
+value for a field it wasn't given. The pre-flight check in proposal.py
+(matching field_values against inspect_form's discovered required fields)
+is what prevents an incomplete plan from ever reaching here; this module
+just fills exactly what it's handed and reports honestly if a field on the
+live page doesn't match anything it has data for.
 """
 
 import json
-import os
 from typing import Any
-
-from strands import Agent
-
-# Known portal structures, keyed by program_id. A real deployment would
-# document each program's actual application flow this way before enabling
-# automated filling for it -- attempting an unmapped program_id is refused,
-# not guessed at.
-PORTAL_MAP: dict[str, dict[str, Any]] = {
-    "ctevt-special-scholarship": {
-        # HTTPS S3 REST endpoint, not the HTTP "website hosting" endpoint --
-        # confirmed live that AgentCore Browser's managed environment
-        # blocks plain HTTP navigation with net::ERR_BLOCKED_BY_CLIENT.
-        # REST endpoint has no automatic index-document resolution, so
-        # every navigate/link target below is an explicit filename, never
-        # a bare "/".
-        "base_url": os.environ.get(
-            "MOCK_PORTAL_BASE_URL",
-            "https://sahayogi-mock-portal-557723775608.s3.amazonaws.com",
-        ),
-        # (page path, [(field_name, selector), ...], next-button selector)
-        "steps": [
-            (
-                "/step1-personal.html",
-                [
-                    "full_name",
-                    "date_of_birth_bs",
-                    "citizenship_number",
-                    "gender",
-                    "father_name",
-                    "mother_name",
-                    "phone_number",
-                ],
-            ),
-            (
-                "/step2-education.html",
-                ["see_symbol_number", "exam_year_bs", "school_name", "gpa_or_division", "desired_program"],
-            ),
-            (
-                "/step3-eligibility.html",
-                ["province", "local_level", "caste_ethnicity", "family_annual_income_npr"],
-            ),
-            (
-                "/step4-documents.html",
-                ["doc_citizenship", "doc_transcript", "doc_category_certificate", "doc_residency"],
-            ),
-        ],
-        # Fields that are plain text/select/number inputs -- typed via the
-        # "type" action. Everything else in a step's field list is treated
-        # as a checkbox -- clicked, not typed, and only if the profile value
-        # is truthy.
-        "checkbox_fields": {"doc_citizenship", "doc_transcript", "doc_category_certificate", "doc_residency"},
-        "select_fields": {"gender", "desired_program", "province"},
-    }
-}
-
-
-# Confirmed live: an orchestrator-constructed profile uses reasonable but
-# non-canonical field names ("dob_bs" not "date_of_birth_bs", "phone" not
-# "phone_number", etc). Rather than trying to force exact vocabulary out of
-# an LLM via prompting (unreliable — wording will keep drifting run to
-# run), normalize known synonyms here. This is a translation layer, not a
-# relaxation of the "never fabricate" rule below: every key on the right is
-# still either present in the input or explicitly derived from something
-# the user actually said, never invented.
-_FIELD_ALIASES: dict[str, dict[str, str]] = {
-    "ctevt-special-scholarship": {
-        "name": "full_name",
-        "dob_bs": "date_of_birth_bs",
-        "dob": "date_of_birth_bs",
-        "phone": "phone_number",
-        "father": "father_name",
-        "mother": "mother_name",
-        "see_gpa": "gpa_or_division",
-        "see_year_bs": "exam_year_bs",
-        "see_school": "school_name",
-        "program_applied": "desired_program",
-        "applying_for": "desired_program",
-        "district": "local_level",
-        "family_income_npr": "family_annual_income_npr",
-    }
-}
-
-# Two known vocabulary patterns observed live across repeated runs (not
-# hypothetical -- confirmed 3 different key names for "list of documents
-# I have ready" alone: documents_ready, documents_available, and whatever
-# the next run invents). Matched structurally (any list-valued key whose
-# name contains "document"), not by growing an exact-name list forever --
-# the exact list-of-4-booleans it derives into is still keyword-matched
-# against real document names the applicant actually stated, never guessed.
-_DOCUMENT_KEYWORDS: dict[str, list[str]] = {
-    "doc_citizenship": ["citizenship"],
-    "doc_transcript": ["transcript", "marksheet", "see"],
-    "doc_category_certificate": ["caste", "category"],
-    "doc_residency": ["residency", "residence"],
-}
-
-
-def _find_documents_list(profile: dict[str, Any]) -> list[Any] | None:
-    for key, value in profile.items():
-        if "document" in key.lower() and isinstance(value, list):
-            return value
-    return None
-
-
-def _normalize_profile(program_id: str, applicant_profile: dict[str, Any]) -> dict[str, Any]:
-    profile = dict(applicant_profile)
-
-    for alias, canonical in _FIELD_ALIASES.get(program_id, {}).items():
-        if alias in profile and canonical not in profile:
-            profile[canonical] = profile[alias]
-
-    if "caste_ethnicity" not in profile and profile.get("marginalized_groups"):
-        profile["caste_ethnicity"] = profile["marginalized_groups"][0]
-
-    documents_list = _find_documents_list(profile)
-    if documents_list:
-        ready_text = " ".join(str(x).lower() for x in documents_list)
-        for field, keywords in _DOCUMENT_KEYWORDS.items():
-            if field not in profile and any(kw in ready_text for kw in keywords):
-                profile[field] = True
-
-    return profile
-
-
-def _required_fields(program_id: str) -> list[str]:
-    portal = PORTAL_MAP[program_id]
-    fields: list[str] = []
-    for _path, names in portal["steps"]:
-        fields.extend(names)
-    return fields
-
-
-def missing_fields(program_id: str, applicant_profile: dict[str, Any]) -> list[str]:
-    """Pure Python, no browser/model call — which required fields are absent
-    after normalization (see _normalize_profile)."""
-    profile = _normalize_profile(program_id, applicant_profile)
-    return [f for f in _required_fields(program_id) if f not in profile or profile[f] in (None, "")]
-
-
-def _build_task_prompt(portal: dict[str, Any], applicant_profile: dict[str, Any], session_name: str) -> str:
-    lines = [
-        f'Use the browser tool. First call init_session with session_name="{session_name}" and a short description.',
-        f"Then navigate to {portal['base_url']}{portal['steps'][0][0]}",
-        "",
-        "For each of the following pages, in order: type the given value into the input "
-        'matching CSS selector "#<field_name>" for text/number/select fields (for <select> '
-        "elements, use the click action on the option's visible text if typing doesn't work, "
-        "or use the evaluate action to set .value and dispatch a change event), and for "
-        'checkbox fields, use the click action on "#<field_name>" ONLY if the given value is '
-        "true. After all fields on a page are filled, click the visible submit/next button "
-        '(selector: button[type="submit"]) to advance to the next page.',
-        "",
-    ]
-    for path, field_names in portal["steps"]:
-        lines.append(f"Page {path}:")
-        for name in field_names:
-            value = applicant_profile.get(name)
-            kind = "checkbox" if name in portal["checkbox_fields"] else "field"
-            lines.append(f'  - {kind} "{name}" = {value!r}')
-        lines.append("")
-
-    lines += [
-        "After the last page (step4-documents.html), you'll land on step5-review.html — "
-        "a read-only review page. Check the declaration checkbox "
-        '(selector "#declaration") — this represents the human approval that already '
-        'happened before you were invoked — then click button[type="submit"] to submit.',
-        "",
-        "You should land on confirmation.html. Use get_text with selector "
-        '"#ref-number" to read the generated reference number, and take a screenshot '
-        "for the record.",
-        "",
-        "Respond with ONLY a single JSON object, no prose, no markdown fence:",
-        '{"ok": true|false, "reference_number": "<string or null>", "notes": "<what happened, '
-        'especially any error, unexpected page state, or step you could not complete>"}',
-    ]
-    return "\n".join(lines)
 
 
 def _parse_result_json(raw_text: str) -> dict[str, Any]:
@@ -212,55 +31,78 @@ def _parse_result_json(raw_text: str) -> dict[str, Any]:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Confirmed live: despite explicit "ONLY a single JSON object, no
-    # prose" instructions, the model sometimes still prefixes a sentence
-    # ("All steps completed successfully. Here is the result:") before the
-    # JSON. Fall back to extracting the {...} block instead of failing a
-    # run that actually succeeded.
+    # Confirmed live (form_filler, pre-pivot): models sometimes prefix JSON
+    # with a sentence of prose despite explicit "ONLY JSON" instructions.
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1 and end > start:
         return json.loads(text[start : end + 1])
     raise json.JSONDecodeError("no JSON object found in model output", text, 0)
 
 
-def form_filler(session_id: str, program_id: str, applicant_profile: dict[str, Any]) -> dict[str, Any]:
-    """Fill and submit a program's application using AgentCore Browser.
+def _build_task_prompt(url: str, fields: list[dict[str, Any]], submit_selector: str | None) -> str:
+    lines = [
+        f"Use the browser tool. First call init_session, then navigate to {url}.",
+        "",
+        "Fill in the following fields, in order. For text/email/tel/number/date "
+        "fields, use the type action on the given selector. For select fields, "
+        "use evaluate to set the element's value and dispatch a change event if "
+        "clicking the option text doesn't work. For checkbox fields, use the "
+        "click action only if the value is true.",
+        "",
+    ]
+    for f in fields:
+        lines.append(f"  - {f['field_type']} field, selector \"{f['selector']}\" (label: {f['label']!r}) = {f['value']!r}")
+
+    submit_line = (
+        f'After all fields are filled, click the submit button (selector: "{submit_selector}") to submit the form.'
+        if submit_selector
+        else "After all fields are filled, find and click the form's submit button."
+    )
+    lines += [
+        "",
+        submit_line,
+        "",
+        "After submitting, capture whatever confirmation the page shows (a "
+        "success message, a confirmation code, a thank-you page -- use "
+        "get_text on the page body if you're not sure of an exact selector) "
+        "and take a screenshot for the record.",
+        "",
+        "Respond with ONLY a single JSON object, no prose, no markdown fence:",
+        '{"ok": true|false, "confirmation_text": "<string or null>", "notes": '
+        '"<what happened, especially any error, unexpected page state, or '
+        'field you could not fill>"}',
+    ]
+    return "\n".join(lines)
+
+
+def fill_and_submit_form(
+    session_id: str,
+    url: str,
+    fields: list[dict[str, Any]],
+    submit_selector: str | None,
+    region: str = "us-east-1",
+) -> dict[str, Any]:
+    """Fill and submit a web form using AgentCore Browser.
 
     NOT a Strands @tool — deliberately not callable by the orchestrator's
     main agent. Only resume_after_approval() calls this, after a human
     decision is already recorded.
 
+    Args:
+        session_id: For browser session naming only.
+        url: The form's URL.
+        fields: [{"label", "field_type", "selector", "value"}, ...] — the
+            exact plan already shown to and approved by a human. Every
+            entry here gets filled; nothing is added or invented.
+        submit_selector: CSS selector for the submit button, if known from
+            inspect_form.
+
     Returns:
-        {"ok": bool, "reference_number": str | None, "notes": str}
-        ok=False (with no browser session ever started) if the program has
-        no known portal mapping, or if applicant_profile is missing fields
-        the form requires — never fabricates a value to fill the gap.
+        {"ok": bool, "confirmation_text": str | None, "notes": str}
     """
-    if program_id not in PORTAL_MAP:
-        return {
-            "ok": False,
-            "reference_number": None,
-            "notes": f"No known portal mapping for program_id={program_id!r}; refusing to guess a form flow.",
-        }
+    from strands import Agent
+    from strands_tools.browser import AgentCoreBrowser  # local import: keeps this dep off tools that don't need it
 
-    applicant_profile = _normalize_profile(program_id, applicant_profile)
-    missing = missing_fields(program_id, applicant_profile)
-    if missing:
-        return {
-            "ok": False,
-            "reference_number": None,
-            "notes": f"Missing required fields, refusing to submit with fabricated data: {missing}",
-        }
-
-    portal = PORTAL_MAP[program_id]
-    browser_session_name = f"sahayogi-{session_id[:20]}".lower().replace("_", "-")
-
-    # Local import: keeps the AgentCore Browser dependency chain
-    # (bedrock-agentcore, playwright) off the import path for every other
-    # tool/test that doesn't need it.
-    from strands_tools.browser import AgentCoreBrowser
-
-    region = os.environ.get("AWS_REGION", "us-east-1")
     browser_tool = AgentCoreBrowser(region=region)
     filler_agent = Agent(
         system_prompt=(
@@ -273,7 +115,7 @@ def form_filler(session_id: str, program_id: str, applicant_profile: dict[str, A
         callback_handler=None,  # raw tool chatter isn't user-facing; see module docstring
     )
 
-    task_prompt = _build_task_prompt(portal, applicant_profile, browser_session_name)
+    task_prompt = _build_task_prompt(url, fields, submit_selector)
     response = filler_agent(task_prompt)
 
     try:
@@ -281,12 +123,12 @@ def form_filler(session_id: str, program_id: str, applicant_profile: dict[str, A
     except json.JSONDecodeError:
         return {
             "ok": False,
-            "reference_number": None,
+            "confirmation_text": None,
             "notes": f"Browser agent did not return valid JSON: {str(response)[:500]!r}",
         }
 
     return {
         "ok": bool(result.get("ok", False)),
-        "reference_number": result.get("reference_number"),
+        "confirmation_text": result.get("confirmation_text"),
         "notes": result.get("notes", ""),
     }

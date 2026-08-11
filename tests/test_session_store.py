@@ -16,18 +16,18 @@ def test_missing_session_returns_none():
 
 
 def test_save_then_get_round_trips():
-    saved = save_pending_proposal("s1", {"program_id": "ctevt-special-scholarship"})
+    saved = save_pending_proposal("s1", {"url": "example-rsvp-form"})
     assert saved["status"] == "pending_approval"
 
     fetched = get_session("s1")
-    assert fetched["proposal"]["program_id"] == "ctevt-special-scholarship"
+    assert fetched["proposal"]["url"] == "example-rsvp-form"
     assert fetched["status"] == "pending_approval"
 
 
 def test_revising_a_pending_proposal_overwrites_it():
-    save_pending_proposal("s1", {"program_id": "a"})
-    save_pending_proposal("s1", {"program_id": "b"})  # agent changed its mind pre-approval
-    assert get_session("s1")["proposal"]["program_id"] == "b"
+    save_pending_proposal("s1", {"url": "a"})
+    save_pending_proposal("s1", {"url": "b"})  # agent changed its mind pre-approval
+    assert get_session("s1")["proposal"]["url"] == "b"
 
 
 def test_update_status_on_missing_session_raises():
@@ -37,15 +37,15 @@ def test_update_status_on_missing_session_raises():
 
 def test_cannot_overwrite_a_decided_session():
     # Safety property: decision history is immutable once resolved.
-    save_pending_proposal("s1", {"program_id": "a"})
+    save_pending_proposal("s1", {"url": "a"})
     update_status("s1", status="approved", decision_note="looks good")
 
     with pytest.raises(ValueError):
-        save_pending_proposal("s1", {"program_id": "a-revised"})
+        save_pending_proposal("s1", {"url": "a-revised"})
 
 
 def test_update_status_records_note():
-    save_pending_proposal("s1", {"program_id": "a"})
+    save_pending_proposal("s1", {"url": "a"})
     updated = update_status("s1", status="rejected", decision_note="wrong program")
     assert updated["status"] == "rejected"
     assert updated["decision_note"] == "wrong program"

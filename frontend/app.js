@@ -70,6 +70,22 @@ function fieldRow(label, value) {
   return `<div><strong>${label}:</strong> ${value}</div>`;
 }
 
+function renderProposalBody(proposal) {
+  const fieldRows = (proposal.fields || [])
+    .map((f) => {
+      const value = f.value === null || f.value === undefined || f.value === "" ? "<em>(empty)</em>" : escapeHtml(String(f.value));
+      const reqTag = f.required ? ' <span style="color:#b45309;">*</span>' : "";
+      return `<tr><td>${escapeHtml(f.label)}${reqTag}</td><td>${value}</td></tr>`;
+    })
+    .join("");
+
+  return (
+    fieldRow("URL", `<a href="${escapeHtml(proposal.url)}" target="_blank" rel="noopener">${escapeHtml(proposal.url)}</a>`) +
+    `<div style="margin-top:10px;">${escapeHtml(proposal.summary_for_human)}</div>` +
+    (fieldRows ? `<table class="review-table" style="margin-top:10px;">${fieldRows}</table>` : "")
+  );
+}
+
 async function refreshSession() {
   const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}`);
   const session = await res.json();
@@ -81,12 +97,11 @@ async function refreshSession() {
     decisionResult.hidden = true;
     approveBtn.disabled = false;
     rejectBtn.disabled = false;
-    proposalBody.innerHTML =
-      fieldRow("Program", p.program_id) + `<div style="margin-top:8px;">${escapeHtml(p.summary_for_human)}</div>`;
+    proposalBody.innerHTML = renderProposalBody(p);
   } else if (["submitted", "rejected", "submission_failed"].includes(session.status)) {
     proposalCard.hidden = false;
     proposalActions.hidden = true; // decision is final -- no point showing a disabled note+buttons
-    proposalBody.innerHTML = fieldRow("Program", session.proposal ? session.proposal.program_id : "—");
+    proposalBody.innerHTML = session.proposal ? renderProposalBody(session.proposal) : "—";
     decisionResult.hidden = false;
     if (session.status === "submitted") {
       decisionResult.className = "decision-result success";
@@ -155,8 +170,8 @@ approveBtn.addEventListener("click", () => decide("approved"));
 rejectBtn.addEventListener("click", () => decide("rejected"));
 
 const ACTION_LABELS = {
-  eligibility_matched: "🔎 Matched eligible programs",
-  application_proposed: "📋 Proposed an application",
+  fields_matched: "🔎 Read the form and matched your details",
+  form_fill_proposed: "📋 Proposed a submission",
   submission_approved: "✅ Human approved",
   submission_rejected: "❌ Human rejected",
   submission_completed: "🎉 Submission completed",
@@ -176,9 +191,20 @@ async function refreshActivity() {
   }
 }
 
+document.getElementById("new-session-btn").addEventListener("click", () => {
+  // A session_id can only ever be proposed on once (propose_application
+  // refuses to overwrite a decided session -- see agent/tools/proposal.py).
+  // The only way to start a genuinely new conversation is a fresh id.
+  if (!confirm("Start a new conversation? This clears the current chat and proposal from view (nothing is deleted server-side).")) {
+    return;
+  }
+  localStorage.removeItem(SESSION_KEY);
+  window.location.reload();
+});
+
 // Initial load: greet + sync any existing session state (e.g. after a page refresh).
 addMessage(
-  "Namaste! Tell me about your situation — age, education level, family details, district — and I'll look for scholarships or subsidies you may qualify for.",
+  "Namaste! Give me a link to a form you need filled out (an RSVP, a signup, an application) and tell me about yourself, and I'll read the actual form, draft what I'd submit, and wait for your approval before doing anything.",
   "agent"
 );
 refreshSession();

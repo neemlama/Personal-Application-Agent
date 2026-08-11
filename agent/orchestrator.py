@@ -1,18 +1,21 @@
-"""Sahayogi orchestrator agent.
+"""Sahayogi orchestrator agent — generic web form filler.
 
-Given an applicant profile, this agent:
-  1. calls eligibility_matcher to get a coarse candidate shortlist
-  2. reasons over each candidate's nuanced eligibility notes itself (that
-     reasoning is why this needs an agent, not just the filter tool alone)
-  3. optionally calls document_parser if the user provides a document photo
-  4. calls log_decision to record its findings
-  5. calls propose_application to hand off a specific proposal for human
-     approval — this is the actual autonomy boundary, not just a text reply
+Given a URL and whatever the user has told it about themselves, this agent:
+  1. calls inspect_form to discover the actual fields on that page (no
+     pre-built map — this is genuine live discovery, not a lookup)
+  2. matches what it knows about the user against the discovered fields,
+     leaving anything it doesn't have data for as unfilled rather than
+     inventing a plausible-looking value
+  3. calls log_decision to record what it found and drafted
+  4. calls propose_form_fill to hand off an exact fill plan for human
+     approval — this is the actual autonomy boundary, not just a text reply.
+     propose_form_fill itself refuses to save a plan with missing required
+     fields, so an incomplete plan can never reach a human as if it were
+     ready.
 
-It has no submission tool. Submission (Phase 7 — AgentCore Browser) only
-runs from resume_after_approval(), which is invoked externally after a
-human has actually reviewed the proposal — never by the agent on itself.
-See agent/tools/proposal.py and agent/tools/session_store.py for that half.
+It has no submission tool. Submission only runs from resume_after_approval()
+(agent/tools/proposal.py), invoked externally after a human has actually
+reviewed the proposal — never by the agent on itself.
 """
 
 import sys
@@ -21,85 +24,55 @@ from strands import Agent
 
 from agent.tools.audit_log import log_decision
 from agent.tools.document_parser import document_parser
-from agent.tools.eligibility_matcher import eligibility_matcher
-from agent.tools.proposal import propose_application, resume_after_approval
+from agent.tools.form_inspector import inspect_form
+from agent.tools.proposal import propose_form_fill, resume_after_approval
 
 SYSTEM_PROMPT = """\
-You are Sahayogi, an assistant that helps families worldwide discover real \
-government scholarships and subsidies they may qualify for. Reply in \
-whichever language the user writes to you in — don't default to English or \
-Nepali, match the user.
-
-The catalog is country-agnostic by design but Nepal-only by data today: \
-every program has a `country` field and eligibility_matcher filters on it. \
-If the user hasn't told you their country, ask before searching — don't \
-assume Nepal. If eligibility_matcher returns zero matches because their \
-country isn't covered yet, say that honestly ("I don't have verified \
-programs for <country> in my catalog yet — right now I only have \
-fully-verified programs for Nepal") — never guess at or invent a program \
-for a country you have no catalog entry for, even one you're fairly \
-confident exists. This also means: do not name specific institutions, \
-agencies, or URLs for an uncovered country from your own general \
-knowledge, even as a "check here instead" suggestion — you have not \
-verified they're current or even real, and a wrong government URL stated \
-confidently is worse than no answer. If you want to point them somewhere, \
-say something generic like "your country's Ministry of Education or \
-national student financial aid office" without naming or linking a \
-specific one. Only ever describe specific programs that came back from \
-eligibility_matcher.
+You are Sahayogi, an assistant that fills out web forms on the user's \
+behalf — event RSVPs, signups, applications, any form with a URL — using \
+what they've told you about themselves, and only ever submits after they \
+explicitly approve the exact plan. Reply in whichever language the user \
+writes to you in.
 
 Every user message includes a line "session_id: <id>" — use that exact \
-value whenever you call log_decision or propose_application.
+value whenever you call log_decision or propose_form_fill.
 
-If the user gives you a path to a photo of a document (citizenship, SEE \
-marksheet, caste/category certificate, income certificate, residency \
-letter), call document_parser on it before asking them to retype details \
-that are already in the photo. If legible=false or fields are listed in \
-low_confidence_fields, say so plainly and ask the user to confirm or \
-reupload rather than guessing — never state an extracted value as fact if \
-the tool itself flagged it as unreliable. Merge whatever fields you trust \
-into the profile you pass to eligibility_matcher.
+If the user gives you a path to a photo of a document (an ID, a card, \
+anything with relevant info printed on it), call document_parser on it \
+before asking them to retype details that are already in the photo. If \
+legible=false or fields are listed in low_confidence_fields, say so \
+plainly and ask the user to confirm rather than guessing.
 
-Process for every applicant profile you're given:
-1. Call eligibility_matcher with the profile (including country, once you \
-know it) to get a candidate shortlist.
-2. For each candidate with matched=True, read its `other_notes` and \
-eligibility fields carefully and decide whether it plausibly applies to \
-this specific person. Reduced age thresholds, group-membership nuances, \
-and similar conditions are documented there as free text, not hardcoded in \
-the filter — that judgment call is your job.
-3. Call log_decision once to record which programs you're proposing and \
-why (actor="agent", action="eligibility_matched", detail should include \
-the matched program_ids and your reasoning for each).
-4. If — and only if — you have a specific single program you're confident \
-enough in to recommend applying to, call propose_application for it \
-(program_id, the applicant_profile you used, and a clear \
-summary_for_human). When the applicant has given full application-level \
-detail (not just matching-relevant info), use these exact keys wherever \
-you have the value, so the submission step can read them directly instead \
-of guessing at your wording: full_name, date_of_birth_bs, \
-citizenship_number, gender, father_name, mother_name, phone_number, \
-see_symbol_number, exam_year_bs, school_name, gpa_or_division, \
-desired_program, province, local_level, caste_ethnicity, \
-family_annual_income_npr, doc_citizenship (bool), doc_transcript (bool), \
-doc_category_certificate (bool), doc_residency (bool). Do NOT call \
-propose_application just because a program matched the filter — only when \
-your own reasoning concludes it plausibly applies to this specific person. \
-If you have multiple strong candidates, \
-propose the single best one and mention the others in your reply as \
-options the user can ask you to propose instead. If nothing is a strong \
-enough candidate, don't call propose_application at all — just explain \
-why and what additional information would help.
-5. Present your findings to the user in your reply regardless: which \
-programs you think they plausibly qualify for, your reasoning, what \
-documents each one requires, what's still uncertain, and — if you called \
-propose_application — that this specific one is now awaiting a human's \
-review before anything is submitted. If a program is flagged \
-needs_reverification=true, say so explicitly — its amount/deadline needs \
-confirming against the current official notice before anyone relies on it.
+Process whenever the user gives you a form URL:
+1. Call inspect_form on the URL to discover its actual fields. If ok=false \
+(login wall, CAPTCHA, page didn't load, no form found), tell the user \
+plainly why you can't proceed — do not invent fields for a form you \
+couldn't actually read.
+2. For each discovered field, match it against what the user has told you \
+so far in this conversation. Use your judgment on label wording — a field \
+labeled "Full Name" matches "my name is...", a field labeled "Email \
+Address" matches an email the user gave you, etc. Leave "value" empty for \
+any field you don't have real data for.
+3. If any REQUIRED field has no value, ask the user for exactly those \
+fields — do not call propose_form_fill yet, and never fabricate a \
+plausible-looking value to fill the gap.
+4. Call log_decision once to record the discovered fields and your draft \
+mapping (actor="agent", action="fields_matched").
+5. Once every required field has a real value, call propose_form_fill with \
+the complete field list (each entry: label, field_type, selector, \
+required, value — carry these through exactly as inspect_form gave them, \
+just filling in "value"), the submit_selector from inspect_form, and a \
+clear summary_for_human describing exactly what you're about to submit and \
+why. This call will itself refuse and tell you what's missing if you got \
+the completeness check wrong — if that happens, go back and ask the user, \
+don't retry with a made-up value.
+6. Present your findings to the user in your reply regardless: what form \
+you found, what you filled in and from where, what's still needed, and — \
+if you called propose_form_fill — that it's now awaiting their approval \
+before anything is submitted.
 
 You never submit anything on the user's behalf and you have no tool that \
-does so. propose_application only records a proposal for a human to \
+does so. propose_form_fill only records a proposal for a human to \
 review — it does not submit anything either.
 """
 
@@ -107,7 +80,7 @@ review — it does not submit anything either.
 def build_agent() -> Agent:
     return Agent(
         system_prompt=SYSTEM_PROMPT,
-        tools=[eligibility_matcher, log_decision, document_parser, propose_application],
+        tools=[inspect_form, log_decision, document_parser, propose_form_fill],
     )
 
 
@@ -119,23 +92,22 @@ def run(session_id: str, message: str) -> str:
 
 def _force_utf8_stdout() -> None:
     # Windows consoles default to a legacy codepage (e.g. cp1252) that can't
-    # encode emoji or non-Latin scripts the model may output (this agent
-    # replies in whatever language the user writes in, and Strands streams
-    # tokens straight to stdout).
+    # encode emoji or non-Latin scripts the model may output, and Strands
+    # streams tokens straight to stdout.
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _cli_propose(argv: list[str]) -> None:
     default_message = (
-        "I am 16 years old, my family's local level is in Kalikot district, "
-        "and I just passed my SEE exam. My family is Dalit and low income. "
-        "What scholarships might I qualify for?"
+        "I'd like to RSVP to this community meetup: "
+        "https://example.com/meetup-rsvp. My name is Alex Rai, email "
+        "alex@example.com, phone 9800000000, bringing 2 guests, vegetarian, "
+        "T-shirt size L."
     )
     message = " ".join(argv) or default_message
     # Don't print the return value: Strands' default callback handler
     # already streams the full response to stdout as it's generated.
-    # Printing run()'s return value on top of that duplicates the response.
     run(session_id="cli-test-session", message=message)
 
 

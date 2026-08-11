@@ -33,6 +33,20 @@ body {
 .brand h1 { margin: 0; font-size: 22px; }
 .brand p { margin: 2px 0 0; font-size: 13px; opacity: 0.9; }
 
+.btn-new-session {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-new-session:hover { background: rgba(255, 255, 255, 0.25); }
+
 .layout {
   max-width: 1100px;
   margin: 20px auto;
@@ -134,7 +148,11 @@ body {
 
 .proposal-card h2, .activity-panel h2 { margin: 0 0 10px; font-size: 15px; color: var(--teal-dark); }
 
-.proposal-body { font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+.proposal-body { font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; max-height: 320px; overflow-y: auto; }
+
+.proposal-body .review-table { width: 100%; border-collapse: collapse; white-space: normal; }
+.proposal-body .review-table td { padding: 5px 4px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: top; }
+.proposal-body .review-table td:first-child { color: var(--text-muted); width: 45%; }
 
 .proposal-actions textarea {
   width: 100%;

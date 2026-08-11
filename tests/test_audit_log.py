@@ -18,7 +18,7 @@ def test_normal_entry_round_trips_with_generated_fields():
         session_id="s1",
         actor="agent",
         action="eligibility_matched",
-        detail={"matched_ids": ["ctevt-special-scholarship"]},
+        detail={"matched_ids": ["example-rsvp-form"]},
     )
     assert entry["session_id"] == "s1"
     assert entry["entry_id"]  # generated, non-empty
@@ -47,7 +47,7 @@ def test_requires_human_approval_flag_is_recorded_not_enforced():
         session_id="s1",
         actor="agent",
         action="submission_prepared",
-        detail={"program_id": "ctevt-special-scholarship"},
+        detail={"url": "example-rsvp-form"},
         requires_human_approval=True,
     )
     assert entry["requires_human_approval"] is True

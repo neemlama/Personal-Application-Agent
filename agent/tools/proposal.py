@@ -1,23 +1,22 @@
-"""propose_application (agent-facing tool) + resume_after_approval
+"""propose_form_fill (agent-facing tool) + resume_after_approval
 (externally-driven, NOT an agent tool) — the two halves of the human
 approval session boundary.
 
-propose_application is the actual handoff point: calling it is the
-orchestrator declaring "I'm done reasoning, here's what I'd submit, a human
-needs to decide." Nothing after this point runs autonomously. Treat it as
-the consequential action it is, not a routine tool call.
+propose_form_fill is the actual handoff point: calling it is the
+orchestrator declaring "I'm done reasoning, here's exactly what I'd fill
+in and submit, a human needs to decide." Nothing after this point runs
+autonomously. Treat it as the consequential action it is, not a routine
+tool call.
 
 resume_after_approval is deliberately NOT decorated with @tool — the agent
 does not call this on itself. It's invoked externally (CLI/API) only after
-an actual human has reviewed the proposal, which is the entire point of
-the session-boundary design (see docs / Phase 3 architecture decision). On
-"approved" it now actually drives form_filler (Phase 7 — AgentCore
-Browser) to complete the real submission.
+an actual human has reviewed the proposal. On "approved" it drives
+fill_and_submit_form (AgentCore Browser) to complete the real submission.
 
-Known gap, scoped out deliberately rather than silently: if form_filler
-fails (network blip, portal change, etc.), status lands on
-"submission_failed" and stops there — no automatic retry yet. A human
-would need a manual follow-up path, not built in this pass.
+Known gap, scoped out deliberately rather than silently: if
+fill_and_submit_form fails (network blip, page changed, etc.), status
+lands on "submission_failed" and stops there — no automatic retry yet. A
+human would need a manual follow-up path, not built in this pass.
 """
 
 from typing import Any, Literal
@@ -25,44 +24,64 @@ from typing import Any, Literal
 from strands import tool
 
 from agent.tools.audit_log import log_decision
-from agent.tools.form_filler import form_filler
+from agent.tools.form_filler import fill_and_submit_form
 from agent.tools.session_store import get_session, save_pending_proposal, update_status
 
 
+def _missing_required_fields(fields: list[dict[str, Any]]) -> list[str]:
+    return [f["label"] for f in fields if f.get("required") and f.get("value") in (None, "")]
+
+
 @tool
-def propose_application(
+def propose_form_fill(
     session_id: str,
-    program_id: str,
-    applicant_profile: dict[str, Any],
+    url: str,
+    fields: list[dict[str, Any]],
+    submit_selector: str | None,
     summary_for_human: str,
 ) -> dict[str, Any]:
-    """Save a proposed application and mark it awaiting human approval.
+    """Save a proposed form submission and mark it awaiting human approval.
 
-    Call this once you've decided which program to propose and drafted a
-    clear explanation for the human — not before. This is the handoff: it
-    durably records the proposal (so it survives to a second, later
-    invocation) and logs it to the audit trail with
-    requires_human_approval=True. No submission happens here or as a
-    result of calling this — submission is a separate, not-yet-implemented
-    capability that can only run after resume_after_approval sees an
-    "approved" decision.
+    Call this only after inspect_form has told you what the form actually
+    contains AND you have a value for every field you're confident about.
+    This is the handoff: it durably records the exact fill plan (so it
+    survives to a second, later invocation) and logs it to the audit trail
+    with requires_human_approval=True. No submission happens here or as a
+    result of calling this.
 
     Args:
         session_id: The session this proposal belongs to.
-        program_id: The catalog program_id being proposed.
-        applicant_profile: The applicant profile used to reach this proposal
-            (whatever was passed to eligibility_matcher, plus anything
-            merged in from document_parser).
+        url: The form's URL.
+        fields: [{"label", "field_type", "selector", "required", "value"},
+            ...] — one entry per field inspect_form discovered. Leave
+            "value" as null/empty for anything you don't have data for —
+            do NOT invent a value. If any REQUIRED field has no value,
+            this call is refused (see Raises) so you can ask the user
+            instead of proposing an incomplete plan.
+        submit_selector: CSS selector for the submit button, from
+            inspect_form.
         summary_for_human: Your plain-language explanation of what you're
-            proposing and why — this is what the human approver reads.
+            about to submit and why — this is what the human approver reads.
 
     Returns:
         The saved session record: {session_id, status: "pending_approval",
         proposal, decision_note}.
+
+    Raises:
+        ValueError: one or more required fields have no value. The message
+            lists which ones — go back and ask the user for them.
     """
+    missing = _missing_required_fields(fields)
+    if missing:
+        raise ValueError(
+            f"Refusing to propose: these required fields have no value yet: {missing}. "
+            "Ask the user for them rather than guessing."
+        )
+
     proposal = {
-        "program_id": program_id,
-        "applicant_profile": applicant_profile,
+        "url": url,
+        "fields": fields,
+        "submit_selector": submit_selector,
         "summary_for_human": summary_for_human,
     }
     record = save_pending_proposal(session_id, proposal)
@@ -70,8 +89,8 @@ def propose_application(
     log_decision(
         session_id=session_id,
         actor="agent",
-        action="application_proposed",
-        detail={"program_id": program_id, "summary": summary_for_human},
+        action="form_fill_proposed",
+        detail={"url": url, "summary": summary_for_human},
         requires_human_approval=True,
     )
 
@@ -84,7 +103,7 @@ def resume_after_approval(
     note: str = "",
 ) -> str:
     """Second half of the approval flow. Called externally after a human has
-    actually reviewed the proposal saved by propose_application — never by
+    actually reviewed the proposal saved by propose_form_fill — never by
     the agent on itself.
 
     Raises:
@@ -92,7 +111,7 @@ def resume_after_approval(
         ValueError: the session was already decided (idempotency guard —
             prevents a double-click or repeated call from processing the
             same approval/rejection twice, which matters a lot once
-            "approved" triggers a real submission in Phase 7).
+            "approved" triggers a real submission).
     """
     session = get_session(session_id)
     if session is None:
@@ -103,13 +122,13 @@ def resume_after_approval(
             "refusing to process the same decision twice."
         )
 
-    program_id = session["proposal"]["program_id"]
+    url = session["proposal"]["url"]
 
     log_decision(
         session_id=session_id,
         actor="human",
         action=f"submission_{decision}",
-        detail={"note": note, "program_id": program_id},
+        detail={"note": note, "url": url},
         requires_human_approval=False,
     )
     update_status(session_id, status=decision, decision_note=note)
@@ -121,22 +140,20 @@ def resume_after_approval(
     # the one place in the whole system that takes an irreversible external
     # action, and it can only be reached after the guard above confirms a
     # human decision was just recorded for this exact session.
-    applicant_profile = session["proposal"]["applicant_profile"]
-    result = form_filler(session_id=session_id, program_id=program_id, applicant_profile=applicant_profile)
+    fields = session["proposal"]["fields"]
+    submit_selector = session["proposal"]["submit_selector"]
+    result = fill_and_submit_form(session_id=session_id, url=url, fields=fields, submit_selector=submit_selector)
 
     if result["ok"]:
         log_decision(
             session_id=session_id,
             actor="agent",
             action="submission_completed",
-            detail={"program_id": program_id, "reference_number": result["reference_number"]},
+            detail={"url": url, "confirmation_text": result["confirmation_text"]},
             requires_human_approval=False,
         )
         update_status(session_id, status="submitted", decision_note=note)
-        return (
-            f"Approved and submitted for session {session_id}. "
-            f"Reference number: {result['reference_number']}"
-        )
+        return f"Approved and submitted for session {session_id}. Confirmation: {result['confirmation_text']}"
 
     # Submission failed -- land on a distinct terminal-ish status (not
     # "approved", not "pending_approval") so it's visibly not silently
@@ -146,7 +163,7 @@ def resume_after_approval(
         session_id=session_id,
         actor="agent",
         action="submission_failed",
-        detail={"program_id": program_id, "notes": result["notes"]},
+        detail={"url": url, "notes": result["notes"]},
         requires_human_approval=False,
     )
     update_status(session_id, status="submission_failed", decision_note=note)
