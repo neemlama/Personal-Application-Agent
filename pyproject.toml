@@ -1,10 +1,18 @@
 [project]
 name = "sahayogi"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agent that finds scholarships/subsidies a family qualifies for and prepares the application, pausing for human approval before submission."
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.43.68",
     "strands-agents>=1.51.0",
     "strands-agents-tools>=0.8.6",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
