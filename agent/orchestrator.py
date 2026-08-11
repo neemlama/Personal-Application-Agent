@@ -74,9 +74,18 @@ the matched program_ids and your reasoning for each).
 4. If — and only if — you have a specific single program you're confident \
 enough in to recommend applying to, call propose_application for it \
 (program_id, the applicant_profile you used, and a clear \
-summary_for_human). Do NOT call propose_application just because a program \
-matched the filter — only when your own reasoning concludes it plausibly \
-applies to this specific person. If you have multiple strong candidates, \
+summary_for_human). When the applicant has given full application-level \
+detail (not just matching-relevant info), use these exact keys wherever \
+you have the value, so the submission step can read them directly instead \
+of guessing at your wording: full_name, date_of_birth_bs, \
+citizenship_number, gender, father_name, mother_name, phone_number, \
+see_symbol_number, exam_year_bs, school_name, gpa_or_division, \
+desired_program, province, local_level, caste_ethnicity, \
+family_annual_income_npr, doc_citizenship (bool), doc_transcript (bool), \
+doc_category_certificate (bool), doc_residency (bool). Do NOT call \
+propose_application just because a program matched the filter — only when \
+your own reasoning concludes it plausibly applies to this specific person. \
+If you have multiple strong candidates, \
 propose the single best one and mention the others in your reply as \
 options the user can ask you to propose instead. If nothing is a strong \
 enough candidate, don't call propose_application at all — just explain \

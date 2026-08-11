@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sahayogi</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark">🙏</span>
+    <div>
+      <h1>Sahayogi</h1>
+      <p>Finds scholarships &amp; subsidies you qualify for — researches, proposes, and only submits after you approve.</p>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="chat-panel">
+    <div id="messages" class="messages" aria-live="polite"></div>
+    <form id="chat-form" class="chat-form">
+      <input id="chat-input" type="text" placeholder="Tell me about your situation — age, education, family details..." autocomplete="off" />
+      <button type="submit">Send</button>
+    </form>
+  </section>
+
+  <aside class="side-panel">
+    <div id="proposal-card" class="proposal-card" hidden>
+      <h2>📋 Proposed Application</h2>
+      <div id="proposal-body" class="proposal-body"></div>
+      <div id="proposal-actions" class="proposal-actions">
+        <textarea id="decision-note" placeholder="Optional note (e.g. 'verified with school')"></textarea>
+        <div class="button-row">
+          <button id="reject-btn" class="btn secondary">Reject</button>
+          <button id="approve-btn" class="btn primary">Approve &amp; Submit</button>
+        </div>
+      </div>
+      <div id="decision-result" class="decision-result" hidden></div>
+    </div>
+
+    <div class="activity-panel">
+      <h2>🔍 Agent Activity</h2>
+      <ul id="activity-log" class="activity-log"></ul>
+    </div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

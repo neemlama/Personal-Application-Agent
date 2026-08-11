@@ -90,23 +90,42 @@ PORTAL_MAP: dict[str, dict[str, Any]] = {
 # the user actually said, never invented.
 _FIELD_ALIASES: dict[str, dict[str, str]] = {
     "ctevt-special-scholarship": {
+        "name": "full_name",
         "dob_bs": "date_of_birth_bs",
+        "dob": "date_of_birth_bs",
         "phone": "phone_number",
+        "father": "father_name",
+        "mother": "mother_name",
         "see_gpa": "gpa_or_division",
         "see_year_bs": "exam_year_bs",
         "see_school": "school_name",
         "program_applied": "desired_program",
+        "applying_for": "desired_program",
+        "district": "local_level",
         "family_income_npr": "family_annual_income_npr",
     }
 }
 
-# documents_ready free-text list -> doc_* booleans, by keyword match.
+# Two known vocabulary patterns observed live across repeated runs (not
+# hypothetical -- confirmed 3 different key names for "list of documents
+# I have ready" alone: documents_ready, documents_available, and whatever
+# the next run invents). Matched structurally (any list-valued key whose
+# name contains "document"), not by growing an exact-name list forever --
+# the exact list-of-4-booleans it derives into is still keyword-matched
+# against real document names the applicant actually stated, never guessed.
 _DOCUMENT_KEYWORDS: dict[str, list[str]] = {
     "doc_citizenship": ["citizenship"],
     "doc_transcript": ["transcript", "marksheet", "see"],
     "doc_category_certificate": ["caste", "category"],
     "doc_residency": ["residency", "residence"],
 }
+
+
+def _find_documents_list(profile: dict[str, Any]) -> list[Any] | None:
+    for key, value in profile.items():
+        if "document" in key.lower() and isinstance(value, list):
+            return value
+    return None
 
 
 def _normalize_profile(program_id: str, applicant_profile: dict[str, Any]) -> dict[str, Any]:
@@ -119,8 +138,9 @@ def _normalize_profile(program_id: str, applicant_profile: dict[str, Any]) -> di
     if "caste_ethnicity" not in profile and profile.get("marginalized_groups"):
         profile["caste_ethnicity"] = profile["marginalized_groups"][0]
 
-    if "documents_ready" in profile:
-        ready_text = " ".join(str(x).lower() for x in profile["documents_ready"])
+    documents_list = _find_documents_list(profile)
+    if documents_list:
+        ready_text = " ".join(str(x).lower() for x in documents_list)
         for field, keywords in _DOCUMENT_KEYWORDS.items():
             if field not in profile and any(kw in ready_text for kw in keywords):
                 profile[field] = True

@@ -179,3 +179,46 @@ def test_normalize_profile_does_not_mutate_the_input_dict():
     original = dict(REAL_ORCHESTRATOR_PROFILE)
     _normalize_profile("ctevt-special-scholarship", REAL_ORCHESTRATOR_PROFILE)
     assert REAL_ORCHESTRATOR_PROFILE == original
+
+
+# A second, DIFFERENT real profile shape from a second live orchestrator run
+# (2026-08-11, session web-e2e-1, via the actual web API) -- confirms the
+# vocabulary drift isn't a one-off, it's inherent to LLM generation. Three
+# different spellings of "documents ready" have now been observed across
+# two runs (documents_ready, documents_available) plus more renamed fields
+# (name, father, mother, district, applying_for).
+REAL_ORCHESTRATOR_PROFILE_V2 = {
+    "name": "Sunita Nepali",
+    "dob_bs": "2065-03-12",
+    "citizenship_number": "12-34-56-78901",
+    "gender": "female",
+    "father": "Ram Nepali",
+    "mother": "Sita Nepali",
+    "phone": "9800000000",
+    "see_symbol_number": "TEST-2082-004521",
+    "see_year_bs": 2082,
+    "see_school": "Sample Secondary School",
+    "see_gpa": 3.65,
+    "applying_for": "Diploma in Civil Engineering",
+    "district": "Kalikot",
+    "province": "Karnali",
+    "marginalized_groups": ["Dalit"],
+    "family_income_npr": 150000,
+    "country": "NP",
+    "citizenship": "NP",
+    "education_level": "SEE_passed",
+    "age": 17,
+    "documents_available": ["citizenship", "SEE transcript", "category certificate", "residency proof"],
+}
+
+
+def test_second_real_profile_shape_has_zero_missing_fields_after_normalization():
+    assert missing_fields("ctevt-special-scholarship", REAL_ORCHESTRATOR_PROFILE_V2) == []
+
+
+def test_find_documents_list_matches_either_observed_key_name():
+    from agent.tools.form_filler import _find_documents_list
+
+    assert _find_documents_list({"documents_ready": ["a"]}) == ["a"]
+    assert _find_documents_list({"documents_available": ["b"]}) == ["b"]
+    assert _find_documents_list({"unrelated": ["c"]}) is None
