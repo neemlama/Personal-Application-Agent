@@ -114,7 +114,13 @@ def document_parser(image_path: str, document_type: DocumentType = "other") -> d
     except (FileNotFoundError, OSError) as e:
         return _failure(str(e))
 
-    extractor = Agent(system_prompt=_extraction_prompt(document_type))
+    # callback_handler=None: this sub-agent's raw output is parsed as JSON
+    # below, never shown to a user. Without this it streams straight to
+    # stdout via Strands' default PrintingCallbackHandler and, when called
+    # mid-conversation from the orchestrator, interleaves raw unparsed JSON
+    # into what should be a clean user-facing response stream. Confirmed
+    # live: this was silently duplicating output before this fix.
+    extractor = Agent(system_prompt=_extraction_prompt(document_type), callback_handler=None)
     response = extractor(
         [
             {"image": image_block},
