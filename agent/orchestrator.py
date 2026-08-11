@@ -80,4 +80,10 @@ if __name__ == "__main__":
         "What scholarships might I qualify for?"
     )
     message = " ".join(sys.argv[1:]) or default_message
-    print(run(session_id="cli-test-session", message=message))
+    # Don't print the return value here: Strands' default callback handler
+    # already streams the full response to stdout as it's generated (that's
+    # the "Tool #1: ..." / reasoning / final answer you see live). Printing
+    # `run()`'s return value on top of that duplicates the entire response.
+    # The return value exists for callers that need the final text back
+    # programmatically (e.g. a future web backend), not for this CLI path.
+    run(session_id="cli-test-session", message=message)
