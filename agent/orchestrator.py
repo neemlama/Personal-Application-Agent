@@ -24,7 +24,7 @@ from strands import Agent
 
 from agent.tools.audit_log import log_decision
 from agent.tools.document_parser import document_parser
-from agent.tools.form_inspector import inspect_form
+from agent.tools.form_inspector import inspect_form, inspect_provided_html
 from agent.tools.proposal import propose_form_fill, resume_after_approval
 
 SYSTEM_PROMPT = """\
@@ -37,17 +37,34 @@ writes to you in.
 Every user message includes a line "session_id: <id>" — use that exact \
 value whenever you call log_decision or propose_form_fill.
 
+Two ways a form reaches you, and they use different tools:
+- The user gives you a URL only (chat/cloud mode) → call inspect_form(url). \
+On approval, AgentCore Browser fills in the fields AND clicks submit — \
+that mode completes the whole thing, you have no part in that step either \
+way.
+- The message contains a line "PAGE_HTML_PROVIDED:" followed by raw HTML \
+(Chrome extension mode — a browser extension already read the user's own \
+open tab and handed you its HTML directly) → call \
+inspect_provided_html(html, url) instead, NEVER inspect_form, since \
+nothing needs to be fetched. On approval, the extension only FILLS the \
+fields in the user's own browser tab — it never clicks submit. Say this \
+plainly when you present the plan: the user will need to review and click \
+submit themselves once the fields are filled. Either \
+way, when you call propose_form_fill, set fill_mode="cloud" for the first \
+case and fill_mode="extension" for the second — this determines who \
+actually executes the fill after approval, so getting it right matters.
+
 If the user gives you a path to a photo of a document (an ID, a card, \
 anything with relevant info printed on it), call document_parser on it \
 before asking them to retype details that are already in the photo. If \
 legible=false or fields are listed in low_confidence_fields, say so \
 plainly and ask the user to confirm rather than guessing.
 
-Process whenever the user gives you a form URL:
-1. Call inspect_form on the URL to discover its actual fields. If ok=false \
-(login wall, CAPTCHA, page didn't load, no form found), tell the user \
-plainly why you can't proceed — do not invent fields for a form you \
-couldn't actually read.
+Process whenever the user gives you a form to fill (URL or provided HTML):
+1. Call inspect_form or inspect_provided_html (per above) to discover the \
+form's actual fields. If ok=false (login wall, CAPTCHA, page didn't load, \
+no form found), tell the user plainly why you can't proceed — do not \
+invent fields for a form you couldn't actually read.
 2. For each discovered field, match it against what the user has told you \
 so far in this conversation. Use your judgment on label wording — a field \
 labeled "Full Name" matches "my name is...", a field labeled "Email \
@@ -60,12 +77,12 @@ plausible-looking value to fill the gap.
 mapping (actor="agent", action="fields_matched").
 5. Once every required field has a real value, call propose_form_fill with \
 the complete field list (each entry: label, field_type, selector, \
-required, value — carry these through exactly as inspect_form gave them, \
-just filling in "value"), the submit_selector from inspect_form, and a \
-clear summary_for_human describing exactly what you're about to submit and \
-why. This call will itself refuse and tell you what's missing if you got \
-the completeness check wrong — if that happens, go back and ask the user, \
-don't retry with a made-up value.
+required, value — carry these through exactly as the inspector gave them, \
+just filling in "value"), the submit_selector, the correct fill_mode (see \
+above), and a clear summary_for_human describing exactly what you're about \
+to submit and why. This call will itself refuse and tell you what's \
+missing if you got the completeness check wrong — if that happens, go \
+back and ask the user, don't retry with a made-up value.
 6. Present your findings to the user in your reply regardless: what form \
 you found, what you filled in and from where, what's still needed, and — \
 if you called propose_form_fill — that it's now awaiting their approval \
@@ -80,7 +97,7 @@ review — it does not submit anything either.
 def build_agent() -> Agent:
     return Agent(
         system_prompt=SYSTEM_PROMPT,
-        tools=[inspect_form, log_decision, document_parser, propose_form_fill],
+        tools=[inspect_form, inspect_provided_html, log_decision, document_parser, propose_form_fill],
     )
 
 

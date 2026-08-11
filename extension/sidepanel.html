@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sahayogi</title>
+<link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+<header>
+  <span class="brand-mark">🙏</span>
+  <div>
+    <h1>Sahayogi</h1>
+    <p>Personal Application Agent</p>
+  </div>
+</header>
+
+<section id="profile-section" class="panel">
+  <button id="profile-toggle" class="section-toggle" type="button">👤 Your Profile <span id="profile-toggle-icon">▸</span></button>
+  <div id="profile-body" hidden>
+    <p class="hint">Stays on this device only (chrome.storage.local) — sent to the agent only when you click Analyze.</p>
+    <textarea id="profile-text" rows="6" placeholder="e.g. Full name: Neem Lama&#10;Email: neem@example.com&#10;Phone: 98XXXXXXXX&#10;University: Hetauda City College&#10;Program: B.Sc. CSIT, 6th semester"></textarea>
+    <button id="profile-save" class="btn primary small" type="button">Save Profile</button>
+    <span id="profile-saved-note" class="hint" hidden>✅ Saved</span>
+  </div>
+</section>
+
+<section class="panel">
+  <button id="analyze-btn" class="btn primary" type="button">🔍 Analyze This Page</button>
+  <p class="hint">Reads the form on your currently active tab.</p>
+</section>
+
+<section id="messages" class="panel messages" hidden></section>
+
+<section id="reply-section" class="panel">
+  <textarea id="reply-text" rows="2" placeholder="Answer the agent's question..."></textarea>
+  <button id="reply-send" class="btn primary small" type="button">Send</button>
+</section>
+
+<section id="proposal-section" class="panel" hidden>
+  <h2>📋 Proposed Fill Plan</h2>
+  <div id="proposal-url" class="hint"></div>
+  <div id="proposal-summary"></div>
+  <table id="proposal-fields" class="field-table"></table>
+  <div class="button-row">
+    <button id="reject-btn" class="btn secondary" type="button">Reject</button>
+    <button id="authorize-btn" class="btn primary" type="button">Authorize &amp; Fill</button>
+  </div>
+</section>
+
+<section id="result-section" class="panel" hidden>
+  <div id="result-body"></div>
+</section>
+
+<footer>
+  <button id="new-session-btn" class="btn secondary small" type="button">🔄 New Session</button>
+</footer>
+
+<script src="sidepanel.js"></script>
+</body>
+</html>

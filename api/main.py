@@ -31,16 +31,29 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from strands import Agent
 
 from agent.orchestrator import build_agent
 from agent.tools.audit_log import read_local_entries
-from agent.tools.proposal import resume_after_approval
+from agent.tools.proposal import record_extension_fill_result, resume_after_approval
 from agent.tools.session_store import get_session
 
 app = FastAPI(title="Sahayogi API")
+
+# The web frontend is served from this same origin (no CORS needed there),
+# but the Chrome extension's side panel runs on a chrome-extension://
+# origin -- a genuinely different origin, so its fetch() calls here need
+# CORS enabled. Permissive for hackathon-demo purposes; a real deployment
+# would scope allow_origins to the extension's specific ID instead of "*".
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _agents: dict[str, Agent] = {}
 
@@ -54,6 +67,8 @@ def _get_agent(session_id: str) -> Agent:
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    page_html: str | None = None  # set by the Chrome extension; triggers extension-mode inspection
+    page_url: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -63,7 +78,13 @@ class ChatResponse(BaseModel):
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     agent = _get_agent(req.session_id)
-    result = agent(f"session_id: {req.session_id}\n\n{req.message}")
+    prompt = f"session_id: {req.session_id}\n\n{req.message}"
+    if req.page_html:
+        # Marker string the orchestrator's system prompt is instructed to
+        # look for -- selects inspect_provided_html + fill_mode="extension"
+        # instead of inspect_form + fill_mode="cloud".
+        prompt += f"\n\nPAGE_HTML_PROVIDED: (url: {req.page_url or 'unknown'})\n{req.page_html}"
+    result = agent(prompt)
     return ChatResponse(reply=str(result))
 
 
@@ -96,6 +117,34 @@ def decide(session_id: str, req: DecisionRequest) -> dict[str, Any]:
 @app.get("/api/session/{session_id}/audit")
 def audit(session_id: str) -> list[dict[str, Any]]:
     return read_local_entries(session_id)
+
+
+class ExtensionResultRequest(BaseModel):
+    ok: bool
+    confirmation_text: str | None = None
+    notes: str = ""
+    note: str = ""  # human-facing decision note, separate from the extension's own notes
+
+
+@app.post("/api/session/{session_id}/extension-result")
+def extension_result(session_id: str, req: ExtensionResultRequest) -> dict[str, Any]:
+    """Called by the Chrome extension after it executes an approved
+    extension-mode fill plan locally and either succeeds or fails. Never
+    called by the agent, never called for cloud-mode sessions (those
+    finalize synchronously inside /decide instead)."""
+    try:
+        message = record_extension_fill_result(
+            session_id,
+            result={"ok": req.ok, "confirmation_text": req.confirmation_text, "notes": req.notes},
+            note=req.note,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    session = get_session(session_id)
+    return {"message": message, "status": session["status"] if session else "unknown"}
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
