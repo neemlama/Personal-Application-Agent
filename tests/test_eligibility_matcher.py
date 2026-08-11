@@ -91,3 +91,23 @@ def test_geographic_scope_only_excludes_when_program_lists_specific_local_levels
     # program is added.
     results = eligibility_matcher({"local_level": "Some Remote Rural Municipality"})
     assert all("geographic_scope" not in r["exclusion_reasons"] for r in results)
+
+
+def test_matching_country_excludes_nothing():
+    # Normal case: applicant explicitly in Nepal sees all Nepal programs,
+    # same as not specifying a country at all.
+    results = eligibility_matcher({"country": "NP"})
+    assert all("country" not in r["exclusion_reasons"] for r in results)
+
+
+def test_uncovered_country_returns_zero_matches_not_a_fallback():
+    # Core worldwide-architecture guarantee: an applicant asking about a
+    # country with no catalog entries gets an honest empty result -- the
+    # matcher must never silently substitute a different country's program
+    # (that would be exactly the kind of fabrication the catalog's
+    # non-negotiable sourcing rule exists to prevent).
+    results = eligibility_matcher({"country": "KE"})  # Kenya -- zero entries today
+    assert _matched_ids(results) == set()
+    for r in results:
+        assert r["matched"] is False
+        assert "country" in r["exclusion_reasons"]

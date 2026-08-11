@@ -21,6 +21,19 @@ from strands import tool
 from agent.tools.catalog import load_programs
 
 
+def _country_excludes(profile: dict[str, Any], program: dict[str, Any]) -> bool:
+    # Unlike education_level, this is a legitimate hard exclude: there's no
+    # judgment call in "is Nepal's CTEVT program relevant to someone in
+    # Kenya" — it's unambiguously no. The catalog is country-agnostic by
+    # architecture (each entry carries `country`) but Nepal-only by data
+    # today; asking about an uncovered country should come back with zero
+    # matches so the agent says so honestly, not silently substitute a
+    # different country's program.
+    program_country = program.get("country")
+    given = profile.get("country")
+    return bool(program_country and given and program_country != given)
+
+
 def _citizenship_excludes(profile: dict[str, Any], program: dict[str, Any]) -> bool:
     required = program["eligibility"].get("citizenship")
     given = profile.get("citizenship")
@@ -75,6 +88,7 @@ def _geography_excludes(profile: dict[str, Any], program: dict[str, Any]) -> boo
 # judgment call, not a lookup — left to the agent's reasoning over `level`
 # and `education_prerequisite`, same as the age-mitigation judgment calls.
 _EXCLUSION_CHECKS = (
+    ("country", _country_excludes),
     ("citizenship", _citizenship_excludes),
     ("age", _age_excludes),
     ("family_income", _income_excludes),
@@ -89,6 +103,10 @@ def eligibility_matcher(profile: dict[str, Any]) -> list[dict[str, Any]]:
     Args:
         profile: Applicant details. Recognized keys (all optional — missing
             fields are never treated as disqualifying, only as "unknown"):
+            country (str, ISO 3166-1 alpha-2, e.g. "NP" — which country's
+            catalog to search; if omitted, all countries' entries are
+            candidates, so ask the user their country when it's missing
+            and more than one country's worth of programs might exist),
             citizenship (str, e.g. "NP"), age (int), family_income_npr
             (int), local_level (str), marginalized_groups (list[str]),
             single_woman_or_widow (bool). education_level, if you have it,
