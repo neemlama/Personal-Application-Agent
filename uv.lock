@@ -1518,6 +1518,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
     { name = "botocore", extra = ["crt"] },
+    { name = "pillow" },
     { name = "strands-agents" },
     { name = "strands-agents-tools" },
 ]
@@ -1531,6 +1532,7 @@ dev = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.43.68" },
     { name = "botocore", extras = ["crt"], specifier = ">=1.43.68" },
+    { name = "pillow", specifier = ">=12.3.0" },
     { name = "strands-agents", specifier = ">=1.51.0" },
     { name = "strands-agents-tools", specifier = ">=0.8.6" },
 ]

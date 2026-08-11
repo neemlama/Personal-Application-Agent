@@ -19,6 +19,7 @@ decision to make approval a session boundary rather than an in-process wait.
 from strands import Agent
 
 from agent.tools.audit_log import log_decision
+from agent.tools.document_parser import document_parser
 from agent.tools.eligibility_matcher import eligibility_matcher
 
 SYSTEM_PROMPT = """\
@@ -28,6 +29,15 @@ whichever language the user writes to you in (English or Nepali).
 
 Every user message includes a line "session_id: <id>" — use that exact \
 value whenever you call log_decision.
+
+If the user gives you a path to a photo of a document (citizenship, SEE \
+marksheet, caste/category certificate, income certificate, residency \
+letter), call document_parser on it before asking them to retype details \
+that are already in the photo. If legible=false or fields are listed in \
+low_confidence_fields, say so plainly and ask the user to confirm or \
+reupload rather than guessing — never state an extracted value as fact if \
+the tool itself flagged it as unreliable. Merge whatever fields you trust \
+into the profile you pass to eligibility_matcher.
 
 Process for every applicant profile you're given:
 1. Call eligibility_matcher with the profile to get a candidate shortlist.
@@ -54,7 +64,7 @@ act on.
 def build_agent() -> Agent:
     return Agent(
         system_prompt=SYSTEM_PROMPT,
-        tools=[eligibility_matcher, log_decision],
+        tools=[eligibility_matcher, log_decision, document_parser],
     )
 
 
