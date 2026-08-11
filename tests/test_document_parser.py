@@ -22,6 +22,17 @@ def test_parse_model_json_strips_markdown_code_fence():
     assert result["legible"] is True
 
 
+def test_parse_model_json_handles_prose_prefix():
+    # Same defensive fallback as form_filler._parse_result_json (confirmed
+    # live there; applying the identical fix here preemptively for the
+    # identical risk — see that module's regression test for the real
+    # observed case).
+    raw = 'Here is what I found:\n\n{"legible": true, "extracted_fields": {"full_name": "Test"}}'
+    result = _parse_model_json(raw)
+    assert result["legible"] is True
+    assert result["extracted_fields"]["full_name"] == "Test"
+
+
 def test_parse_model_json_raises_on_garbage():
     with pytest.raises(json.JSONDecodeError):
         _parse_model_json("this is not json at all")

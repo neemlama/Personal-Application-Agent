@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Step 1: Personal Information (Sahayogi Mock Portal)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="demo-banner">⚠️ DEMO PORTAL — NOT A REAL GOVERNMENT WEBSITE — for automated testing only.</div>
+<header class="portal-header">
+  <h1>Demo Technical Education Special Scholarship Portal</h1>
+</header>
+<main>
+  <div class="steps">
+    <span class="active">1. Personal Info</span>
+    <span>2. Education</span>
+    <span>3. Eligibility</span>
+    <span>4. Documents</span>
+    <span>5. Review &amp; Submit</span>
+  </div>
+  <h2>Step 1 of 5 — Personal Information</h2>
+  <form id="step1-form">
+    <label for="full_name">Full Name</label>
+    <input type="text" id="full_name" name="full_name" required />
+
+    <label for="date_of_birth_bs">Date of Birth (B.S.)</label>
+    <input type="text" id="date_of_birth_bs" name="date_of_birth_bs" placeholder="YYYY-MM-DD" required />
+
+    <label for="citizenship_number">Citizenship Number</label>
+    <input type="text" id="citizenship_number" name="citizenship_number" required />
+
+    <label for="gender">Gender</label>
+    <select id="gender" name="gender" required>
+      <option value="">-- Select --</option>
+      <option value="Female">Female</option>
+      <option value="Male">Male</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label for="father_name">Father's Name</label>
+    <input type="text" id="father_name" name="father_name" required />
+
+    <label for="mother_name">Mother's Name</label>
+    <input type="text" id="mother_name" name="mother_name" required />
+
+    <label for="phone_number">Contact Phone Number</label>
+    <input type="text" id="phone_number" name="phone_number" required />
+
+    <div class="actions">
+      <span></span>
+      <button type="submit">Next: Education Details</button>
+    </div>
+  </form>
+</main>
+<script src="portal.js"></script>
+<script>
+  const form = document.getElementById("step1-form");
+  window.addEventListener("DOMContentLoaded", () => prefillForm(form));
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    goToNext(form, "step2-education.html");
+  });
+</script>
+</body>
+</html>

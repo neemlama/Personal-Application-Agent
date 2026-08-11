@@ -10,7 +10,14 @@ the consequential action it is, not a routine tool call.
 resume_after_approval is deliberately NOT decorated with @tool — the agent
 does not call this on itself. It's invoked externally (CLI/API) only after
 an actual human has reviewed the proposal, which is the entire point of
-the session-boundary design (see docs / Phase 3 architecture decision).
+the session-boundary design (see docs / Phase 3 architecture decision). On
+"approved" it now actually drives form_filler (Phase 7 — AgentCore
+Browser) to complete the real submission.
+
+Known gap, scoped out deliberately rather than silently: if form_filler
+fails (network blip, portal change, etc.), status lands on
+"submission_failed" and stops there — no automatic retry yet. A human
+would need a manual follow-up path, not built in this pass.
 """
 
 from typing import Any, Literal
@@ -18,6 +25,7 @@ from typing import Any, Literal
 from strands import tool
 
 from agent.tools.audit_log import log_decision
+from agent.tools.form_filler import form_filler
 from agent.tools.session_store import get_session, save_pending_proposal, update_status
 
 
@@ -95,11 +103,13 @@ def resume_after_approval(
             "refusing to process the same decision twice."
         )
 
+    program_id = session["proposal"]["program_id"]
+
     log_decision(
         session_id=session_id,
         actor="human",
         action=f"submission_{decision}",
-        detail={"note": note, "program_id": session["proposal"]["program_id"]},
+        detail={"note": note, "program_id": program_id},
         requires_human_approval=False,
     )
     update_status(session_id, status=decision, decision_note=note)
@@ -107,10 +117,37 @@ def resume_after_approval(
     if decision == "rejected":
         return f"Rejected. No further action taken for session {session_id}."
 
-    # decision == "approved" -- this is where AgentCore Browser submission
-    # will run (Phase 7). That tool doesn't exist yet, so approval is
-    # recorded and stops here rather than pretending to submit anything.
-    return (
-        f"Approved and recorded for session {session_id}. "
-        "Submission execution is not implemented yet (Phase 7)."
+    # decision == "approved" -- drive the actual submission now. This is
+    # the one place in the whole system that takes an irreversible external
+    # action, and it can only be reached after the guard above confirms a
+    # human decision was just recorded for this exact session.
+    applicant_profile = session["proposal"]["applicant_profile"]
+    result = form_filler(session_id=session_id, program_id=program_id, applicant_profile=applicant_profile)
+
+    if result["ok"]:
+        log_decision(
+            session_id=session_id,
+            actor="agent",
+            action="submission_completed",
+            detail={"program_id": program_id, "reference_number": result["reference_number"]},
+            requires_human_approval=False,
+        )
+        update_status(session_id, status="submitted", decision_note=note)
+        return (
+            f"Approved and submitted for session {session_id}. "
+            f"Reference number: {result['reference_number']}"
+        )
+
+    # Submission failed -- land on a distinct terminal-ish status (not
+    # "approved", not "pending_approval") so it's visibly not silently
+    # retried by a repeat call, and not confused with an undecided session.
+    # No automatic retry built yet -- see module docstring.
+    log_decision(
+        session_id=session_id,
+        actor="agent",
+        action="submission_failed",
+        detail={"program_id": program_id, "notes": result["notes"]},
+        requires_human_approval=False,
     )
+    update_status(session_id, status="submission_failed", decision_note=note)
+    return f"Approved, but submission failed for session {session_id}: {result['notes']}"

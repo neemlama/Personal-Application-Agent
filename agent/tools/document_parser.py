@@ -83,7 +83,18 @@ def _parse_model_json(raw_text: str) -> dict[str, Any]:
         text = text.strip("`")
         if text.lower().startswith("json"):
             text = text[4:].strip()
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Same defensive fallback as form_filler._parse_result_json: confirmed
+    # live there that models sometimes prefix JSON with a sentence of prose
+    # despite explicit "ONLY JSON" instructions. Not yet observed to happen
+    # here, but it's the identical risk, so apply the identical fix.
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(text[start : end + 1])
+    raise json.JSONDecodeError("no JSON object found in model output", text, 0)
 
 
 def _failure(notes: str) -> dict[str, Any]:

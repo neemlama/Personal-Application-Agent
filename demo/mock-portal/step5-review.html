@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Step 5: Review &amp; Submit (Sahayogi Mock Portal)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="demo-banner">⚠️ DEMO PORTAL — NOT A REAL GOVERNMENT WEBSITE — for automated testing only.</div>
+<header class="portal-header">
+  <h1>Demo Technical Education Special Scholarship Portal</h1>
+</header>
+<main>
+  <div class="steps">
+    <span>1. Personal Info</span>
+    <span>2. Education</span>
+    <span>3. Eligibility</span>
+    <span>4. Documents</span>
+    <span class="active">5. Review &amp; Submit</span>
+  </div>
+  <h2>Step 5 of 5 — Review Your Application</h2>
+  <div id="review-output"></div>
+
+  <form id="step5-form">
+    <div class="checkbox-row">
+      <input type="checkbox" id="declaration" name="declaration" required />
+      <label for="declaration" style="margin:0;">
+        I declare that the information provided above is true to the best of my knowledge.
+      </label>
+    </div>
+
+    <div class="actions">
+      <a class="btn secondary" href="step4-documents.html">Back</a>
+      <button type="submit" id="submit-btn">Submit Application</button>
+    </div>
+  </form>
+</main>
+<script src="portal.js"></script>
+<script>
+  const fieldLabels = [
+    ["full_name", "Full Name"],
+    ["date_of_birth_bs", "Date of Birth (B.S.)"],
+    ["citizenship_number", "Citizenship Number"],
+    ["gender", "Gender"],
+    ["father_name", "Father's Name"],
+    ["mother_name", "Mother's Name"],
+    ["phone_number", "Phone Number"],
+    ["see_symbol_number", "SEE/SLC Symbol Number"],
+    ["exam_year_bs", "Exam Year (B.S.)"],
+    ["school_name", "School Name"],
+    ["gpa_or_division", "GPA / Division"],
+    ["desired_program", "Desired Program"],
+    ["province", "Province"],
+    ["local_level", "District / Local Level"],
+    ["caste_ethnicity", "Caste / Ethnicity / Category"],
+    ["family_annual_income_npr", "Family Annual Income (NPR)"],
+    ["from_underserved_area", "From Underserved Area"],
+    ["doc_citizenship", "Citizenship Document Ready"],
+    ["doc_transcript", "SEE/SLC Transcript Ready"],
+    ["doc_category_certificate", "Category Certificate Ready"],
+    ["doc_residency", "Residency Proof Ready"],
+  ];
+
+  window.addEventListener("DOMContentLoaded", () => renderReview("review-output", fieldLabels));
+
+  document.getElementById("step5-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    saveState(collectForm(e.target));
+    submitApplication();
+  });
+</script>
+</body>
+</html>

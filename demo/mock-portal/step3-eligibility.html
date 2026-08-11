@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Step 3: Eligibility &amp; Category (Sahayogi Mock Portal)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="demo-banner">⚠️ DEMO PORTAL — NOT A REAL GOVERNMENT WEBSITE — for automated testing only.</div>
+<header class="portal-header">
+  <h1>Demo Technical Education Special Scholarship Portal</h1>
+</header>
+<main>
+  <div class="steps">
+    <span>1. Personal Info</span>
+    <span>2. Education</span>
+    <span class="active">3. Eligibility</span>
+    <span>4. Documents</span>
+    <span>5. Review &amp; Submit</span>
+  </div>
+  <h2>Step 3 of 5 — Eligibility &amp; Category</h2>
+  <form id="step3-form">
+    <label for="province">Province</label>
+    <select id="province" name="province" required>
+      <option value="">-- Select --</option>
+      <option value="Koshi">Koshi</option>
+      <option value="Madhesh">Madhesh</option>
+      <option value="Bagmati">Bagmati</option>
+      <option value="Gandaki">Gandaki</option>
+      <option value="Lumbini">Lumbini</option>
+      <option value="Karnali">Karnali</option>
+      <option value="Sudurpashchim">Sudurpashchim</option>
+    </select>
+
+    <label for="local_level">District / Local Level</label>
+    <input type="text" id="local_level" name="local_level" required />
+
+    <label for="caste_ethnicity">Caste / Ethnicity / Category</label>
+    <input type="text" id="caste_ethnicity" name="caste_ethnicity" placeholder="e.g. Dalit, Janajati, Muslim, Other" required />
+
+    <label for="family_annual_income_npr">Family Annual Income (NPR)</label>
+    <input type="number" id="family_annual_income_npr" name="family_annual_income_npr" required />
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="from_underserved_area" name="from_underserved_area" />
+      <label for="from_underserved_area" style="margin:0;">
+        I am applying from a local level with historically limited access to technical education
+      </label>
+    </div>
+
+    <div class="actions">
+      <a class="btn secondary" href="step2-education.html">Back</a>
+      <button type="submit">Next: Documents</button>
+    </div>
+  </form>
+</main>
+<script src="portal.js"></script>
+<script>
+  const form = document.getElementById("step3-form");
+  window.addEventListener("DOMContentLoaded", () => prefillForm(form));
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    goToNext(form, "step4-documents.html");
+  });
+</script>
+</body>
+</html>
