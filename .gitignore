@@ -16,3 +16,4 @@ Thumbs.db
 *.log
 .aws-sam/
 cdk.out/
+infra/seed-data/audit-log.local.jsonl
