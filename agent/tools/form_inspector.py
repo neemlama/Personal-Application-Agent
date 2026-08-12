@@ -137,7 +137,18 @@ def inspect_form(url: str, region: str = "us-east-1") -> dict[str, Any]:
 
     browser_tool = AgentCoreBrowser(region=region)
     inspector = Agent(system_prompt=_INSPECTOR_PROMPT, tools=[browser_tool.browser], callback_handler=None)
-    response = inspector(f"Inspect the form at this URL: {url}")
+    try:
+        response = inspector(f"Inspect the form at this URL: {url}")
+    except Exception as e:
+        return {"ok": False, "fields": [], "submit_selector": None, "notes": f"Inspection failed: {e}"}
+    finally:
+        # Same fix as form_filler.py's fill_and_submit_form -- see that
+        # comment for why this matters and why the private _cleanup() is
+        # the right call here, not the public `close` action.
+        try:
+            browser_tool._cleanup()
+        except Exception:
+            pass
     return _inspection_result_from_response(response)
 
 

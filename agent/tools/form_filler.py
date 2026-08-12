@@ -116,7 +116,26 @@ def fill_and_submit_form(
     )
 
     task_prompt = _build_task_prompt(url, fields, submit_selector)
-    response = filler_agent(task_prompt)
+    try:
+        response = filler_agent(task_prompt)
+    except Exception as e:
+        return {"ok": False, "confirmation_text": None, "notes": f"Browser agent failed: {e}"}
+    finally:
+        # Confirmed live: without this, the remote AgentCore Browser
+        # session was only ever cleaned up by Python's __del__ at an
+        # unpredictable time (or AWS's own idle timeout, up to
+        # session_timeout_seconds=3600 by default) -- neither is
+        # deterministic for a billable cloud resource. _cleanup() closes
+        # every session this browser_tool opened, whatever the LLM named
+        # it (the public `close` action needs a session_name to match,
+        # which we don't reliably know -- the model picks it). Private
+        # method, used deliberately: it's strands_tools.browser's own
+        # teardown path (the public `close` action calls this same
+        # method), not a workaround.
+        try:
+            browser_tool._cleanup()
+        except Exception:
+            pass  # best-effort -- AWS's idle timeout is still a backstop
 
     try:
         result = _parse_result_json(str(response))
