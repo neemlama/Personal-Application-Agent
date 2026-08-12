@@ -15,10 +15,19 @@ value for a field it wasn't given. The pre-flight check in proposal.py
 is what prevents an incomplete plan from ever reaching here; this module
 just fills exactly what it's handed and reports honestly if a field on the
 live page doesn't match anything it has data for.
+
+Cost note: runs on Haiku, not the default Sonnet -- see
+agent/tools/form_inspector.py's module docstring for the full reasoning.
+This is the single most expensive path in the system (one browser action
+== one full model call, every field/click/screenshot), so it's also where
+model tiering matters most. Live-tested after switching, not assumed --
+see tests/manual_form_filler_livecheck.py.
 """
 
 import json
 from typing import Any
+
+_HAIKU_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 
 def _parse_result_json(raw_text: str) -> dict[str, Any]:
@@ -113,6 +122,7 @@ def fill_and_submit_form(
         ),
         tools=[browser_tool.browser],
         callback_handler=None,  # raw tool chatter isn't user-facing; see module docstring
+        model=_HAIKU_MODEL_ID,
     )
 
     task_prompt = _build_task_prompt(url, fields, submit_selector)

@@ -21,7 +21,18 @@ Deliberate scope limits, stated rather than silently assumed:
   - No login walls, no CAPTCHA solving, no JS-heavy SPA forms that render
     fields after complex interaction. Static/server-rendered forms only.
   - Neither fills or submits anything -- read-only.
+
+Cost note: both inspectors run on Haiku, not the default Sonnet. Reading
+labels/types/selectors out of HTML is structured extraction, not judgment
+-- it doesn't need a frontier model, and inspect_form's browser-driving
+loop in particular racks up many sequential calls (one per browser action),
+each at Sonnet's 5x-pricier output-token rate otherwise. The orchestrator
+itself (agent/orchestrator.py) stays on the default model -- that's where
+matching a form against a real person's info under ambiguity actually
+needs the stronger model.
 """
+
+_HAIKU_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 import json
 from typing import Any
@@ -136,7 +147,9 @@ def inspect_form(url: str, region: str = "us-east-1") -> dict[str, Any]:
     from strands_tools.browser import AgentCoreBrowser  # local: heavy dep, see form_filler.py
 
     browser_tool = AgentCoreBrowser(region=region)
-    inspector = Agent(system_prompt=_INSPECTOR_PROMPT, tools=[browser_tool.browser], callback_handler=None)
+    inspector = Agent(
+        system_prompt=_INSPECTOR_PROMPT, tools=[browser_tool.browser], callback_handler=None, model=_HAIKU_MODEL_ID
+    )
     try:
         response = inspector(f"Inspect the form at this URL: {url}")
     except Exception as e:
@@ -168,6 +181,6 @@ def inspect_provided_html(html: str, url: str = "") -> dict[str, Any]:
         Same shape as inspect_form: {"ok": bool, "fields": [...],
         "submit_selector": str|None, "notes": str}.
     """
-    inspector = Agent(system_prompt=_HTML_INSPECTOR_PROMPT, callback_handler=None)
+    inspector = Agent(system_prompt=_HTML_INSPECTOR_PROMPT, callback_handler=None, model=_HAIKU_MODEL_ID)
     response = inspector(f"URL (context only, do not fetch): {url or '(not given)'}\n\nPage HTML:\n{html}")
     return _inspection_result_from_response(response)
