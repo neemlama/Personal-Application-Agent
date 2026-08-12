@@ -1,11 +1,16 @@
 [project]
-name = "sahayogi"
+name = "formbuddy"
 version = "0.1.0"
-description = "Agent that finds scholarships/subsidies a family qualifies for and prepares the application, pausing for human approval before submission."
+description = "Agent that reads and fills out web forms on your behalf -- RSVPs, signups, applications -- and only ever submits after you approve the exact plan."
 requires-python = ">=3.12"
 dependencies = [
+    "bedrock-agentcore>=1.21.0",
     "boto3>=1.43.68",
     "botocore[crt]>=1.43.68",
+    "fastapi>=0.141.1",
+    "nest-asyncio>=1.6.0",
+    "pillow>=12.3.0",
+    "playwright>=1.62.0",
     "strands-agents>=1.51.0",
     "strands-agents-tools>=0.8.6",
 ]

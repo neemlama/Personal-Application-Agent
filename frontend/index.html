@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FormBuddy</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark">🙏</span>
+    <div>
+      <h1>FormBuddy</h1>
+      <p>Fills out web forms for you — RSVPs, signups, applications — from a URL. Reads the real form, proposes exactly what it would submit, and only submits after you approve.</p>
+    </div>
+    <button id="new-session-btn" class="btn-new-session" type="button" title="Start a fresh conversation with a new session">🔄 New Conversation</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="chat-panel">
+    <div id="messages" class="messages" aria-live="polite"></div>
+    <form id="chat-form" class="chat-form">
+      <input id="chat-input" type="text" placeholder="Paste a form URL and tell me about yourself..." autocomplete="off" />
+      <button type="submit">Send</button>
+    </form>
+  </section>
+
+  <aside class="side-panel">
+    <div id="proposal-card" class="proposal-card" hidden>
+      <h2>📋 Proposed Submission</h2>
+      <div id="proposal-body" class="proposal-body"></div>
+      <div id="proposal-actions" class="proposal-actions">
+        <textarea id="decision-note" placeholder="Optional note (e.g. 'verified with school')"></textarea>
+        <div class="button-row">
+          <button id="reject-btn" class="btn secondary">Reject</button>
+          <button id="approve-btn" class="btn primary">Approve &amp; Submit</button>
+        </div>
+      </div>
+      <div id="decision-result" class="decision-result" hidden></div>
+    </div>
+
+    <div class="activity-panel">
+      <h2>🔍 Agent Activity</h2>
+      <ul id="activity-log" class="activity-log"></ul>
+    </div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -21,7 +21,7 @@ def main() -> None:
 
     agent = Agent(
         system_prompt=(
-            "You are a smoke-test assistant for the Sahayogi project. "
+            "You are a smoke-test assistant for the FormBuddy project. "
             "Reply with exactly one short sentence confirming you are alive."
         )
     )

@@ -35,7 +35,7 @@ def _write_local(entry: dict[str, Any]) -> None:
 def _write_dynamodb(entry: dict[str, Any]) -> None:
     import boto3  # local import: keeps boto3 off the hot path for local/test runs
 
-    table_name = os.environ.get("AUDIT_LOG_TABLE_NAME", "sahayogi-audit-log")
+    table_name = os.environ.get("AUDIT_LOG_TABLE_NAME", "formbuddy-audit-log")
     boto3.resource("dynamodb").Table(table_name).put_item(Item=entry)
 
 

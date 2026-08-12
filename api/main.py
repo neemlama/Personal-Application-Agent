@@ -1,0 +1,151 @@
+"""FastAPI backend for FormBuddy.
+
+Thin HTTP wrapper around the existing agent/tools code — no agent logic is
+duplicated here, every endpoint just calls the same functions the CLI uses
+(agent/orchestrator.py, agent/tools/proposal.py). Serves frontend/ as
+static files from the same origin so the browser never needs CORS.
+
+Run:
+    uv run uvicorn api.main:app --reload
+
+One deliberate simplification for the MVP: per-session conversation state
+(the Strands Agent object, which holds turn-by-turn memory) is kept in a
+plain in-process dict, not a persistence layer. Fine for a single-server
+demo; a multi-instance deployment would swap this for AgentCore Memory or
+similar without changing any endpoint's logic.
+"""
+
+import sys
+from pathlib import Path
+from typing import Any, Literal
+
+# Same fix as agent/orchestrator.py's CLI path, applied here at server
+# startup instead of inside a __main__ guard: Strands streams tool-call/
+# response chatter straight to stdout via its default callback handler,
+# and Windows consoles default to a legacy codepage that can't encode
+# emoji/Devanagari -- confirmed live, this crashed every /api/chat request
+# with UnicodeEncodeError until fixed. Kept as visible terminal streaming
+# (not silenced) since watching it live alongside the browser is a decent
+# demo device.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from strands import Agent
+
+from agent.orchestrator import build_agent
+from agent.tools.audit_log import read_local_entries
+from agent.tools.proposal import record_extension_fill_result, resume_after_approval
+from agent.tools.session_store import get_session
+
+app = FastAPI(title="FormBuddy API")
+
+# The web frontend is served from this same origin (no CORS needed there),
+# but the Chrome extension's side panel runs on a chrome-extension://
+# origin -- a genuinely different origin, so its fetch() calls here need
+# CORS enabled. Permissive for hackathon-demo purposes; a real deployment
+# would scope allow_origins to the extension's specific ID instead of "*".
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_agents: dict[str, Agent] = {}
+
+
+def _get_agent(session_id: str) -> Agent:
+    if session_id not in _agents:
+        _agents[session_id] = build_agent()
+    return _agents[session_id]
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+    page_html: str | None = None  # set by the Chrome extension; triggers extension-mode inspection
+    page_url: str | None = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(req: ChatRequest) -> ChatResponse:
+    agent = _get_agent(req.session_id)
+    prompt = f"session_id: {req.session_id}\n\n{req.message}"
+    if req.page_html:
+        # Marker string the orchestrator's system prompt is instructed to
+        # look for -- selects inspect_provided_html + fill_mode="extension"
+        # instead of inspect_form + fill_mode="cloud".
+        prompt += f"\n\nPAGE_HTML_PROVIDED: (url: {req.page_url or 'unknown'})\n{req.page_html}"
+    result = agent(prompt)
+    return ChatResponse(reply=str(result))
+
+
+@app.get("/api/session/{session_id}")
+def session_status(session_id: str) -> dict[str, Any]:
+    session = get_session(session_id)
+    if session is None:
+        return {"session_id": session_id, "status": "none", "proposal": None, "decision_note": ""}
+    return session
+
+
+class DecisionRequest(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: str = ""
+
+
+@app.post("/api/session/{session_id}/decide")
+def decide(session_id: str, req: DecisionRequest) -> dict[str, Any]:
+    try:
+        message = resume_after_approval(session_id, decision=req.decision, note=req.note)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    session = get_session(session_id)
+    return {"message": message, "status": session["status"] if session else "unknown"}
+
+
+@app.get("/api/session/{session_id}/audit")
+def audit(session_id: str) -> list[dict[str, Any]]:
+    return read_local_entries(session_id)
+
+
+class ExtensionResultRequest(BaseModel):
+    ok: bool
+    confirmation_text: str | None = None
+    notes: str = ""
+    note: str = ""  # human-facing decision note, separate from the extension's own notes
+
+
+@app.post("/api/session/{session_id}/extension-result")
+def extension_result(session_id: str, req: ExtensionResultRequest) -> dict[str, Any]:
+    """Called by the Chrome extension after it executes an approved
+    extension-mode fill plan locally and either succeeds or fails. Never
+    called by the agent, never called for cloud-mode sessions (those
+    finalize synchronously inside /decide instead)."""
+    try:
+        message = record_extension_fill_result(
+            session_id,
+            result={"ok": req.ok, "confirmation_text": req.confirmation_text, "notes": req.notes},
+            note=req.note,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    session = get_session(session_id)
+    return {"message": message, "status": session["status"] if session else "unknown"}
+
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
